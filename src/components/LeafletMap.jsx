@@ -373,20 +373,39 @@ export default function LeafletMap({
   const [mapReady, setMapReady] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
 
-  const tileUrl = useMemo(() => {
-    if (!rasterUrl || !layerConfig?.key) return null;
+  const rasterVersion = useMemo(() => {
+    if (!rasterUrl) return "0";
 
-    const rescale = RESCALE_MAP[layerConfig.key] || "0,1";
+    const parts = rasterUrl.split("/").filter(Boolean);
 
-    return (
-      `${TITILER_BASE_URL}/styled/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
-      `?url=${encodeURIComponent(rasterUrl)}` +
-      `&style=${encodeURIComponent(layerConfig.key)}` +
-      `&rescale=${encodeURIComponent(rescale)}` +
-      `&nodata=-99999` +
-      `&resampling=bilinear`
-    );
-  }, [rasterUrl, layerConfig?.key]);
+    const year = parts[parts.length - 6];
+    const month = parts[parts.length - 5];
+    const day = parts[parts.length - 4];
+    const run = parts[parts.length - 3];
+
+    if (year && month && day && run) {
+      return `${year}${month}${day}${run}`;
+    }
+
+    return String(Date.now());
+  }, [rasterUrl]);
+
+    const tileUrl = useMemo(() => {
+      if (!rasterUrl || !layerConfig?.key) return null;
+
+      const rescale = RESCALE_MAP[layerConfig.key] || "0,1";
+      const cacheBustedRasterUrl = `${rasterUrl}?v=${encodeURIComponent(rasterVersion)}`;
+
+      return (
+        `${TITILER_BASE_URL}/styled/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
+        `?url=${encodeURIComponent(cacheBustedRasterUrl)}` +
+        `&style=${encodeURIComponent(layerConfig.key)}` +
+        `&rescale=${encodeURIComponent(rescale)}` +
+        `&nodata=-99999` +
+        `&resampling=bilinear` +
+        `&cb=${encodeURIComponent(rasterVersion)}`
+      );
+    }, [rasterUrl, layerConfig?.key, rasterVersion]);
 
   useEffect(() => {
     if (spinnerTimerRef.current) {
@@ -747,7 +766,7 @@ export default function LeafletMap({
 
         {tileUrl && (
           <TileLayer
-            key={tileUrl}
+            key={`${layerConfig?.key || "raster"}-${rasterUrl}-${rasterVersion}`}
             url={tileUrl}
             opacity={opacity / 100}
             updateWhenZooming={false}
