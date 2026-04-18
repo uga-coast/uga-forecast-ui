@@ -12,7 +12,7 @@ import hurricaneTsIcon from "../assets/hurricane_ts_icon.png";
 import hurricaneCat1Icon from "../assets/hurricane_cat1_icon.png";
 import hurricaneCat2Icon from "../assets/hurricane_cat2_icon.png";
 import hurricaneCat3Icon from "../assets/hurricane_cat3_icon.png";
-import hurricaneCat4Icon from "../assets/hurricane_cat4_icon_v2.png";
+import hurricaneCat4Icon from "../assets/hurricane_cat4_icon.png";
 import hurricaneCat5Icon from "../assets/hurricane_cat5_icon.png";
 
 const TITILER_BASE_URL = "https://tiles.gafloodforecast.com";
