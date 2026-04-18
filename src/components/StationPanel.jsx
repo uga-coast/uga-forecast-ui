@@ -7,7 +7,20 @@ function formatUtcTimestamp(timestamp) {
 
 function parseUtcDate(timestamp) {
   if (!timestamp) return null;
-  const iso = timestamp.replace(" ", "T") + "Z";
+
+  let iso = String(timestamp).trim();
+
+  // Convert "YYYY-MM-DD HH:MM:SS" to ISO-like form
+  if (iso.includes(" ") && !iso.includes("T")) {
+    iso = iso.replace(" ", "T");
+  }
+
+  // Only append Z if there is not already a timezone
+  const hasTimezone = /[zZ]$|[+-]\d{2}:\d{2}$/.test(iso);
+  if (!hasTimezone) {
+    iso = `${iso}Z`;
+  }
+
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -44,7 +57,7 @@ function buildNoaaWindow(cycleTimestamp, runMeta, hoursBack = 48, hoursForward =
 }
 
 function formatObservedValue(observation) {
-  if (!observation?.v) return "—";
+  if (observation?.v == null) return "—";
   const value = Number(observation.v);
   return Number.isFinite(value) ? `${value.toFixed(2)} ft NAVD88` : "—";
 }
@@ -132,7 +145,7 @@ function getTimeDomain(observedSeries, forecastSeries) {
   const min = Math.min(...dates);
   const max = Math.max(...dates);
 
-  const sixHoursMs = 3 * 60 * 60 * 1000;
+  const sixHoursMs = 6 * 60 * 60 * 1000;
 
   return {
     min,
