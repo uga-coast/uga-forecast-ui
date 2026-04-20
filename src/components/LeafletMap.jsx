@@ -496,12 +496,13 @@ export default function LeafletMap({
     const officialPointsUrl = buildUrl(hurricaneMeta.pointsGeojsonFile);
     const simTrackUrl = buildUrl(hurricaneMeta.simulationTrackGeojsonFile);
     const simPointsUrl = buildUrl(hurricaneMeta.simulationPointsGeojsonFile);
+    const SHOW_CONE = false; // Temporary toggle until we can confirm cone data is correct and update styling as needed
 
     let cancelled = false;
 
     async function load() {
       try {
-        if (coneUrl && showHurricaneCone) {
+        if (SHOW_CONE && showHurricaneCone) {
           const res = await fetch(coneUrl);
           if (!res.ok) {
             throw new Error(`Cone fetch failed: ${res.status} ${res.statusText} ${coneUrl}`);
