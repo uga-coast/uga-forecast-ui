@@ -84,7 +84,7 @@ function MiniSidebar({
   availableMeshes,
   selectedHurricaneStorm,
   availableHurricaneStorms,
-  showHurricaneCone,
+  //showHurricaneCone,
   showHurricaneTrackPoints
 }) {
   const meshLabel =
@@ -127,10 +127,12 @@ function MiniSidebar({
             <div className="mini-value">{hurricaneStormLabel}</div>
           </div>
 
+          {/* Cone data is currently unreliable so hiding this for now until we can confirm data and update styling as needed *\/}
           <div className="mini-block">
             <div className="mini-label">Cone</div>
             <div className="mini-value">{showHurricaneCone ? "On" : "Off"}</div>
           </div>
+          */}
 
           <div className="mini-block">
             <div className="mini-label">Track</div>
@@ -195,8 +197,8 @@ export default function Sidebar(props) {
     primaryLayer,
     onPrimaryLayerChange,
     waveLayerAvailable,
-    showHurricaneCone,
-    onShowHurricaneConeChange,
+    //showHurricaneCone,
+    //onShowHurricaneConeChange,
     showHurricaneTrackPoints,
     onShowHurricaneTrackPointsChange,
     archiveYears,
@@ -232,7 +234,7 @@ export default function Sidebar(props) {
         availableMeshes={availableMeshes}
         selectedHurricaneStorm={selectedHurricaneStorm}
         availableHurricaneStorms={availableHurricaneStorms}
-        showHurricaneCone={showHurricaneCone}
+        //showHurricaneCone={showHurricaneCone}
         showHurricaneTrackPoints={showHurricaneTrackPoints}
       />
     );
@@ -296,7 +298,6 @@ export default function Sidebar(props) {
           </SidebarSection>
 
           <SidebarSection title="Layer">
-            <label htmlFor="primary-layer">Layer</label>
             <select
               id="primary-layer"
               value={primaryLayer}
@@ -372,30 +373,7 @@ export default function Sidebar(props) {
             />
           </SidebarSection>
 
-          <SidebarSection title="Overlays">
-            <div className="toggle-row">
-              <input
-                id="hurricane-cone-toggle"
-                type="checkbox"
-                checked={showHurricaneCone}
-                onChange={(e) => onShowHurricaneConeChange(e.target.checked)}
-              />
-              <label htmlFor="hurricane-cone-toggle">Show Cone</label>
-            </div>
-
-            <div className="toggle-row">
-              <input
-                id="hurricane-track-toggle"
-                type="checkbox"
-                checked={showHurricaneTrackPoints}
-                onChange={(e) => onShowHurricaneTrackPointsChange(e.target.checked)}
-              />
-              <label htmlFor="hurricane-track-toggle">Show Track &amp; Points</label>
-            </div>
-          </SidebarSection>
-
           <SidebarSection title="Layer">
-            <label htmlFor="primary-layer">Layer</label>
             <select
               id="primary-layer"
               value={primaryLayer}
@@ -410,6 +388,18 @@ export default function Sidebar(props) {
             {!waveLayerAvailable ? (
               <div className="field-help">Wave layer not available for this date/run.</div>
             ) : null}
+          </SidebarSection>
+
+          <SidebarSection title="Overlays">
+            <div className="toggle-row">
+              <input
+                id="hurricane-track-toggle"
+                type="checkbox"
+                checked={showHurricaneTrackPoints}
+                onChange={(e) => onShowHurricaneTrackPointsChange(e.target.checked)}
+              />
+              <label htmlFor="hurricane-track-toggle">Show Track &amp; Points</label>
+            </div>
           </SidebarSection>
         </>
       ) : (
