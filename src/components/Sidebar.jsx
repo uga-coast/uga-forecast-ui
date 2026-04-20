@@ -80,11 +80,18 @@ function MiniSidebar({
   basemap,
   primaryLayer,
   onExpand,
+  selectedMesh,
+  availableMeshes,
   selectedHurricaneStorm,
   availableHurricaneStorms,
   showHurricaneCone,
   showHurricaneTrackPoints
 }) {
+  const meshLabel =
+    availableMeshes?.find((mesh) => mesh.key === selectedMesh)?.label ||
+    selectedMesh ||
+    "--";
+
   const hurricaneStormLabel =
     availableHurricaneStorms?.find((storm) => storm.key === selectedHurricaneStorm)?.label ||
     selectedHurricaneStorm ||
@@ -105,6 +112,13 @@ function MiniSidebar({
         <div className="mini-label">Mode</div>
         <div className={"mini-mode-badge " + mode}>{mode}</div>
       </div>
+
+      {mode !== "archive" ? (
+        <div className="mini-block">
+          <div className="mini-label">Region</div>
+          <div className="mini-value">{meshLabel}</div>
+        </div>
+      ) : null}
 
       {mode === "hurricane" ? (
         <>
@@ -197,6 +211,9 @@ export default function Sidebar(props) {
     availableHurricaneStorms,
     selectedHurricaneStorm,
     onHurricaneStormChange,
+    availableMeshes,
+    selectedMesh,
+    onMeshChange,
     layerConfig
   } = props;
 
@@ -211,6 +228,8 @@ export default function Sidebar(props) {
         basemap={basemap}
         primaryLayer={primaryLayer}
         onExpand={onCollapseToggle}
+        selectedMesh={selectedMesh}
+        availableMeshes={availableMeshes}
         selectedHurricaneStorm={selectedHurricaneStorm}
         availableHurricaneStorms={availableHurricaneStorms}
         showHurricaneCone={showHurricaneCone}
@@ -296,6 +315,21 @@ export default function Sidebar(props) {
         </>
       ) : mode === "hurricane" ? (
         <>
+          <SidebarSection title="Region">
+            <label htmlFor="forecast-region">Region</label>
+            <select
+              id="forecast-region"
+              value={selectedMesh}
+              onChange={(e) => onMeshChange(e.target.value)}
+            >
+              {availableMeshes.map((mesh) => (
+                <option key={mesh.key} value={mesh.key}>
+                  {mesh.label}
+                </option>
+              ))}
+            </select>
+          </SidebarSection>
+
           <SidebarSection title="Storm Forecast">
             <label htmlFor="hurricane-storm">Storm</label>
             <select
@@ -380,6 +414,21 @@ export default function Sidebar(props) {
         </>
       ) : (
         <>
+          <SidebarSection title="Region">
+            <label htmlFor="forecast-region">Region</label>
+            <select
+              id="forecast-region"
+              value={selectedMesh}
+              onChange={(e) => onMeshChange(e.target.value)}
+            >
+              {availableMeshes.map((mesh) => (
+                <option key={mesh.key} value={mesh.key}>
+                  {mesh.label}
+                </option>
+              ))}
+            </select>
+          </SidebarSection>
+
           <SidebarSection title="Forecast">
             <label htmlFor="forecast-date">Available Date</label>
             <input
