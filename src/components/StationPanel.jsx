@@ -66,6 +66,27 @@ function formatForecastValue(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)} ft NAVD88` : "—";
 }
 
+function formatTooltipTime(timeMs) {
+  const d = new Date(timeMs);
+  return `${d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  })} ${String(d.getUTCHours()).padStart(2, "0")}:${String(
+    d.getUTCMinutes()
+  ).padStart(2, "0")} UTC`;
+}
+
+function findNearestPoint(series, timeMs) {
+  if (!series?.length) return null;
+
+  return series.reduce((best, point) => {
+    const diff = Math.abs(point.date.getTime() - timeMs);
+    return !best || diff < best.diff ? { ...point, diff } : best;
+  }, null);
+}
+
 function getYAxisTickStep(min, max) {
   const range = max - min;
   if (range <= 6) return 0.5;
@@ -254,6 +275,8 @@ export default function StationPanel({
 
   const [forecastSeries, setForecastSeries] = useState([]);
   const [forecastStatus, setForecastStatus] = useState("idle");
+
+  const [hoverData, setHoverData] = useState(null);
 
   const chartContainerRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 1000, height: 220 });
@@ -469,6 +492,30 @@ export default function StationPanel({
 
   const hasAnyChartData = Boolean(observedPolyline || forecastPolyline);
 
+  function handleChartMouseMove(event) {
+    if (!timeDomain || !chartStats) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    const usableWidth = chartWidth - margin.left - margin.right;
+    const ratio = Math.max(0, Math.min(1, (mouseX - margin.left) / usableWidth));
+    const timeMs = timeDomain.min + ratio * (timeDomain.max - timeDomain.min);
+
+    setHoverData({
+      timeMs,
+      x: scaleX(timeMs, timeDomain, chartWidth, margin),
+      mouseX,
+      mouseY: event.clientY - rect.top,
+      observed: findNearestPoint(observedSeries, timeMs),
+      forecast: findNearestPoint(forecastSeries, timeMs)
+    });
+}
+
+function handleChartMouseLeave() {
+  setHoverData(null);
+}
+
   return (
     <div className="station-panel-inner">
       <div className="station-resize-handle" onMouseDown={onResizeStart} title="Drag to resize">
@@ -557,6 +604,8 @@ export default function StationPanel({
               <>
               <svg
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                onMouseMove={handleChartMouseMove}
+                onMouseLeave={handleChartMouseLeave}
                 className="chart-svg"
                 preserveAspectRatio="xMidYMid meet"
                 style={{ display: "block", width: "100%", height: `${chartHeight}px` }}
@@ -670,6 +719,58 @@ export default function StationPanel({
                     />
                   )}
 
+                  {hoverData && timeDomain && chartStats && (
+                    <>
+                      <line
+                        x1={hoverData.x}
+                        x2={hoverData.x}
+                        y1={margin.top}
+                        y2={chartHeight - margin.bottom}
+                        stroke="#334155"
+                        strokeWidth="1"
+                        strokeDasharray="4 4"
+                      />
+
+                      {hoverData.observed && (
+                        <circle
+                          cx={scaleX(
+                            hoverData.observed.date.getTime(),
+                            timeDomain,
+                            chartWidth,
+                            margin
+                          )}
+                          cy={scaleY(
+                            hoverData.observed.value,
+                            chartStats,
+                            chartHeight,
+                            margin
+                          )}
+                          r="4"
+                          fill="#2563eb"
+                        />
+                      )}
+
+                      {hoverData.forecast && (
+                        <circle
+                          cx={scaleX(
+                            hoverData.forecast.date.getTime(),
+                            timeDomain,
+                            chartWidth,
+                            margin
+                          )}
+                          cy={scaleY(
+                            hoverData.forecast.value,
+                            chartStats,
+                            chartHeight,
+                            margin
+                          )}
+                          r="4"
+                          fill="#dc2626"
+                        />
+                      )}
+                    </>
+                  )}
+
                   {xTicks.map((tick, i) => {
                     const x = scaleX(tick.timeMs, timeDomain, chartWidth, margin);
                     const prev = xTicks[i - 1];
@@ -710,16 +811,38 @@ export default function StationPanel({
                   })}
                 </svg>
 
-                <div className="chart-legend-overlay">
-                  <div className="chart-legend-item">
-                    <span className="legend-line observed" />
-                    Observed
+                  {hoverData && (
+                    <div
+                      className="chart-tooltip"
+                      style={{
+                        left: hoverData.mouseX + 12,
+                        top: hoverData.mouseY + 12
+                      }}
+                    >
+                      <div className="chart-tooltip-time">
+                        {formatTooltipTime(hoverData.timeMs)}
+                      </div>
+                      <div>
+                        <strong>Observed:</strong>{" "}
+                        {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
+                      </div>
+                      <div>
+                        <strong>Forecast:</strong>{" "}
+                        {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="chart-legend-overlay">
+                    <div className="chart-legend-item">
+                      <span className="legend-line observed" />
+                      Observed
+                    </div>
+                    <div className="chart-legend-item">
+                      <span className="legend-line forecast" />
+                      Forecast
+                    </div>
                   </div>
-                  <div className="chart-legend-item">
-                    <span className="legend-line forecast" />
-                    Forecast
-                  </div>
-                </div>
               </>
             )}
           </div>
