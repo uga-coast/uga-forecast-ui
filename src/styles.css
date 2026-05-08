@@ -996,10 +996,17 @@ button, select, input {
   color: #1d4ed8;
 }
 
-.map-shell.basemap-charcoal .leaflet-overlay-pane img {
+/* Charcoal roads */
+.map-shell.basemap-charcoal .leaflet-overlay-pane .labels-layer {
   filter: saturate(0.1) brightness(0.9) contrast(0.5) !important;
 }
 
-.map-shell.basemap-aerial .leaflet-overlay-pane img {
+/* Aerial roads */
+.map-shell.basemap-aerial .leaflet-overlay-pane .labels-layer {
   filter: grayscale(70%) brightness(0.9) contrast(1.2) !important;
+}
+
+/* Aerial state/place boundaries */
+.map-shell.basemap-aerial .leaflet-overlay-pane .boundaries-layer {
+  filter: grayscale(10%) brightness(2) contrast(0.8) !important;
 }
