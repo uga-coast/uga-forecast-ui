@@ -71,6 +71,11 @@ charcoal: {
       url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
       attribution: "Tiles &copy; Esri",
       maxZoom: 19
+    },
+    boundaries: {
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      attribution: "Tiles &copy; Esri",
+      maxZoom: 19,
     }
   }
 };
@@ -807,6 +812,17 @@ export default function LeafletMap({
             maxZoom={currentBasemapLabels.maxZoom}
             pane="overlayPane"
             className={`labels-layer labels-${basemap}`}
+          />
+        )}
+
+        {currentBasemap.boundaries && (
+          <TileLayer
+            key={`boundaries-${basemap}`}
+            url={currentBasemap.boundaries.url}
+            attribution={currentBasemap.boundaries.attribution}
+            maxZoom={currentBasemap.boundaries.maxZoom}
+            pane="overlayPane"
+            className="boundaries-layer"
           />
         )}
 
