@@ -5,7 +5,7 @@ import {
   Marker,
   TileLayer,
   useMap,
-  ZoomControl
+  ZoomControl,
 } from "react-leaflet";
 import hurricaneTdIcon from "../assets/hurricane_td_icon.png";
 import hurricaneTsIcon from "../assets/hurricane_ts_icon.png";
@@ -32,14 +32,17 @@ const pinnedIcon = L.divIcon({
 });
 
 const BASEMAP_CONFIG = {
-  charcoal: {
-    base: {
-      url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
-      attribution: "&copy; Stadia Maps &copy; OpenMapTiles &copy; OpenStreetMap contributors",
-      subdomains: "abcd",
-      maxZoom: 20
+charcoal: {
+  base: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri",
+    maxZoom: 19,
   },
-  labels: null
+  labels: {
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri",
+    maxZoom: 19,
+  }
 },
   light: {
     base: {
@@ -49,20 +52,6 @@ const BASEMAP_CONFIG = {
       maxZoom: 19
     },
     labels: null
-  },
-  dark: {
-    base: {
-      url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      subdomains: "abcd",
-      maxZoom: 20
-    },
-    labels: {
-      url: "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      subdomains: "abcd",
-      maxZoom: 20
-    }
   },
   topo: {
     base: {
@@ -79,7 +68,7 @@ const BASEMAP_CONFIG = {
       maxZoom: 19
     },
     labels: {
-      url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
       attribution: "Tiles &copy; Esri",
       maxZoom: 19
     }
@@ -774,7 +763,7 @@ export default function LeafletMap({
   ]);
 
   return (
-    <div className="map-shell">
+    <div className={`map-shell basemap-${basemap}`}>
       {showSpinner && (
         <div className="spinner-overlay">
           <div className="spinner" />
@@ -797,17 +786,27 @@ export default function LeafletMap({
         <TileLayer
           url={currentBasemapBase.url}
           attribution={currentBasemapBase.attribution}
-          subdomains={currentBasemapBase.subdomains}
+          {...(
+            currentBasemapBase.subdomains?.length
+              ? { subdomains: currentBasemapBase.subdomains }
+              : {}
+          )}
           maxZoom={currentBasemapBase.maxZoom}
         />
 
         {currentBasemapLabels && (
           <TileLayer
+            key={`labels-${basemap}`}
             url={currentBasemapLabels.url}
             attribution={currentBasemapLabels.attribution}
-            subdomains={currentBasemapLabels.subdomains}
+            {...(
+              currentBasemapLabels.subdomains?.length
+                ? { subdomains: currentBasemapLabels.subdomains }
+                : {}
+            )}
             maxZoom={currentBasemapLabels.maxZoom}
             pane="overlayPane"
+            className={`labels-layer labels-${basemap}`}
           />
         )}
 
