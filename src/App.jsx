@@ -374,11 +374,15 @@ export default function App() {
     if (!availableMeshes.length) return;
 
     const validKeys = availableMeshes.map((mesh) => mesh.key);
+
     if (!validKeys.includes(selectedMesh)) {
       setSelectedMesh(getDefaultMeshKey(manifest, mode));
       setSelectedDate("");
       setSelectedRun("");
-      setSelectedHurricaneStorm("");
+
+      if (mode === MODES.HURRICANE) {
+        setSelectedHurricaneStorm("");
+      }
     }
   }, [manifest, mode, availableMeshes, selectedMesh]);
 
@@ -623,7 +627,11 @@ export default function App() {
   }
 
   function handleModeChange(nextMode) {
+    const nextMesh =
+      nextMode === MODES.ARCHIVE ? "" : getDefaultMeshKey(manifest, nextMode);
+
     setMode(nextMode);
+    setSelectedMesh(nextMesh);
     setSelectedStation(null);
     setPinnedValue({ text: "Click map to pin location", latlng: null });
     setPinCopyStatus("");
