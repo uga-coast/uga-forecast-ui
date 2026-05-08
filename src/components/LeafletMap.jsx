@@ -79,8 +79,22 @@ const BASEMAP_CONFIG = {
 
 const RESCALE_MAP = {
   maxele: "0,9",
+  storm_maxele: "0,9",
+  daily_maxele: "0,5",
   swan_HS_max: "0,20"
 };
+
+function getRasterStyleKey(layerKey, hurricaneMeta) {
+  if (!hurricaneMeta && layerKey === "maxele") {
+    return "daily_maxele";
+  }
+
+  if (hurricaneMeta && layerKey === "maxele") {
+    return "storm_maxele";
+  }
+
+  return layerKey;
+}
 
 const DAILY_DEFAULT_BOUNDS = L.latLngBounds(
   [27.2, -85.5],
@@ -323,6 +337,32 @@ function MapLegend({ layerConfig }) {
   );
 }
 
+function getDisplayLayerConfig(layerConfig, hurricaneMeta) {
+  if (!layerConfig) return null;
+
+    if (!hurricaneMeta && layerConfig.key === "maxele") {
+    return {
+      ...layerConfig,
+      legendTitle: "Water Level (ft, NAVD88)",
+      legendGradient:
+        "linear-gradient(to right, rgb(0,0,255), rgb(0,80,255), rgb(0,130,255), rgb(0,200,255), rgb(0,255,180), rgb(0,255,0), rgb(255,255,0), rgb(255,140,0), rgb(255,0,0))",
+      legendTicks: ["0", "1", "2", "3", "4", "5+"]
+    };
+  }
+
+  if (hurricaneMeta && layerConfig.key === "maxele") {
+    return {
+      ...layerConfig,
+      legendTitle: "Water Level (ft, NAVD88)",
+      legendGradient:
+        "linear-gradient(to right, rgb(0,0,255), rgb(0,80,255), rgb(0,130,255), rgb(0,200,255), rgb(0,255,180), rgb(0,255,0), rgb(255,255,0), rgb(255,140,0), rgb(255,0,0))",
+      legendTicks: ["0", "2", "4", "6", "8", "9+"]
+    };
+  }
+
+  return layerConfig;
+}
+
 export default function LeafletMap({
   stations,
   stationsVisible,
@@ -393,19 +433,25 @@ export default function LeafletMap({
     const tileUrl = useMemo(() => {
       if (!rasterUrl || !layerConfig?.key) return null;
 
-      const rescale = RESCALE_MAP[layerConfig.key] || "0,1";
+      const styleKey = getRasterStyleKey(layerConfig.key, hurricaneMeta);
+      const rescale = RESCALE_MAP[styleKey] || "0,1";
       const cacheBustedRasterUrl = `${rasterUrl}?v=${encodeURIComponent(rasterVersion)}`;
 
       return (
         `${TITILER_BASE_URL}/styled/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
         `?url=${encodeURIComponent(cacheBustedRasterUrl)}` +
-        `&style=${encodeURIComponent(layerConfig.key)}` +
+        `&style=${encodeURIComponent(styleKey)}` +
         `&rescale=${encodeURIComponent(rescale)}` +
         `&nodata=-99999` +
         `&resampling=bilinear` +
         `&cb=${encodeURIComponent(rasterVersion)}`
       );
-    }, [rasterUrl, layerConfig?.key, rasterVersion]);
+    }, [rasterUrl, layerConfig?.key, rasterVersion, hurricaneMeta]);
+
+  const displayLayerConfig = useMemo(
+    () => getDisplayLayerConfig(layerConfig, hurricaneMeta),
+    [layerConfig, hurricaneMeta]
+  );
 
   useEffect(() => {
     if (spinnerTimerRef.current) {
@@ -835,7 +881,7 @@ export default function LeafletMap({
           ))}
       </MapContainer>
 
-      <MapLegend layerConfig={layerConfig} />
+      <MapLegend layerConfig={displayLayerConfig} />
     </div>
   );
 }
