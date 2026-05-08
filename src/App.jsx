@@ -306,7 +306,6 @@ export default function App() {
   const [manifest, setManifest] = useState(null);
   const [manifestStatus, setManifestStatus] = useState("loading");
   const [primaryLayer, setPrimaryLayer] = useState("maxele");
-  const [hasInitializedFromManifest, setHasInitializedFromManifest] = useState(false);
 
   const [selectedMesh, setSelectedMesh] = useState("");
   const [selectedHurricaneStorm, setSelectedHurricaneStorm] = useState("");
@@ -364,10 +363,6 @@ export default function App() {
   }, []);
 
   const availableMeshes = useMemo(() => getModeMeshes(manifest, mode), [manifest, mode]);
-  const selectedMeshData = useMemo(
-    () => getSelectedMeshData(manifest, mode, selectedMesh),
-    [manifest, mode, selectedMesh]
-  );
 
   useEffect(() => {
     if (mode === MODES.ARCHIVE) return;
@@ -421,27 +416,6 @@ export default function App() {
         )
       : (latestRunsOverall.length ? latestRunsOverall[latestRunsOverall.length - 1] : "");
 
-  useEffect(() => {
-    if (hasInitializedFromManifest) return;
-    if (manifestStatus !== "ready") return;
-    if (mode !== MODES.ARCHIVE && !selectedMesh) return;
-    if (mode === MODES.HURRICANE && !selectedHurricaneStorm) return;
-    if (!liveDates.length) return;
-
-    setSelectedDate(latestDateOverall);
-    setSelectedRun(latestRunOverall);
-    setHasInitializedFromManifest(true);
-  }, [
-    hasInitializedFromManifest,
-    manifestStatus,
-    mode,
-    selectedMesh,
-    selectedHurricaneStorm,
-    liveDates,
-    latestDateOverall,
-    latestRunOverall
-  ]);
-
   const availableRuns = useMemo(
     () => sortRuns(runsByDate[selectedDate] || []),
     [runsByDate, selectedDate]
@@ -462,26 +436,50 @@ export default function App() {
   const waveLayerAvailable = availableLayers.includes("swan_HS_max");
 
   useEffect(() => {
+    if (manifestStatus !== "ready") return;
+    if (mode === MODES.ARCHIVE) return;
+    if (!selectedMesh) return;
+    if (mode === MODES.HURRICANE && !selectedHurricaneStorm) return;
     if (!liveDates.length) return;
-    if (!liveDates.includes(selectedDate)) {
-      setSelectedDate(liveDates[0]);
-    }
-  }, [liveDates, selectedDate]);
 
-  useEffect(() => {
-    if (!availableRuns.length) return;
-    if (!availableRuns.includes(selectedRun)) {
-      const preferredRun =
-        mode === MODES.HURRICANE
-          ? (
-              availableRuns.find((run) => String(run).toLowerCase() === "ofcl") ||
-              availableRuns[availableRuns.length - 1]
-            )
-          : availableRuns[availableRuns.length - 1];
+    const nextDate =
+      selectedDate && liveDates.includes(selectedDate)
+        ? selectedDate
+        : liveDates[0];
 
-      setSelectedRun(preferredRun);
+    const runs = sortRuns(runsByDate[nextDate] || []);
+
+    if (!runs.length) {
+      setSelectedDate(nextDate);
+      setSelectedRun("");
+      return;
     }
-  }, [availableRuns, selectedRun, mode]);
+
+    const nextRun =
+      selectedRun && runs.includes(selectedRun)
+        ? selectedRun
+        : mode === MODES.HURRICANE
+          ? runs.find((run) => String(run).toLowerCase() === "ofcl") || runs[runs.length - 1]
+          : runs[runs.length - 1];
+
+    if (selectedDate !== nextDate) {
+      setSelectedDate(nextDate);
+    }
+
+    if (selectedRun !== nextRun) {
+      setSelectedRun(nextRun);
+    }
+  }, [
+    manifestStatus,
+    mode,
+    selectedMesh,
+    selectedHurricaneStorm,
+    liveDates,
+    runsByDate,
+    selectedDate,
+    selectedRun
+  ]);
+
 
   useEffect(() => {
     if (!availableLayers.includes(primaryLayer)) {
@@ -638,7 +636,6 @@ export default function App() {
     setSelectedDate("");
     setSelectedRun("");
     setSelectedHurricaneStorm("");
-    setHasInitializedFromManifest(false);
   }
 
   const statusText = useMemo(() => {
@@ -696,6 +693,16 @@ export default function App() {
     runMeta
   ]);
 
+  console.log({
+    mode,
+    selectedMesh,
+    selectedDate,
+    selectedRun,
+    rasterUrl,
+    liveDates,
+    availableRuns
+  });
+
   return (
     <div className="app-page">
       <Header />
@@ -749,9 +756,13 @@ export default function App() {
           selectedMesh={selectedMesh}
           onMeshChange={(meshKey) => {
             setSelectedMesh(meshKey);
-            setSelectedHurricaneStorm("");
             setSelectedDate("");
             setSelectedRun("");
+
+            if (mode === MODES.HURRICANE) {
+              setSelectedHurricaneStorm("");
+            }
+
             resetInteractiveState();
           }}
           layerConfig={LAYER_CONFIGS[chosenLayer]}
