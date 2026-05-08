@@ -479,6 +479,7 @@ export default function Sidebar(props) {
           value={basemap}
           onChange={(e) => onBasemapChange(e.target.value)}
         >
+          <option value="charcoal">Charcoal</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
           <option value="topo">Topo</option>
