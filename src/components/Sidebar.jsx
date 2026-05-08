@@ -433,9 +433,6 @@ export default function Sidebar(props) {
                 <option key={date} value={date} />
               ))}
             </datalist>
-            <div className="field-help">
-              Available dates: {liveDates.join(", ")}
-            </div>
           </SidebarSection>
 
           <SidebarSection title="Forecast Run">
