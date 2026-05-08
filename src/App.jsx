@@ -319,7 +319,7 @@ export default function App() {
   const [panelHeight, setPanelHeight] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [basemap, setBasemap] = useState("charcoal");
+  const [basemap, setBasemap] = useState("aerial");
   const [showHurricaneCone, setShowHurricaneCone] = useState(true);
   const [showHurricaneTrackPoints, setShowHurricaneTrackPoints] = useState(true);
   const [rasterStatus, setRasterStatus] = useState({
