@@ -28,8 +28,8 @@ button, select, input {
   align-items: center;
   gap: 16px;
   padding: 12px 18px;
-  background: #f0f7ff;
-  border-bottom: 1px solid #d9e2ec;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
 }
 
 .title-left {
@@ -80,8 +80,9 @@ button, select, input {
 }
 
 .sidebar {
-  background: #ffffff;
-  border-right: 1px solid #d9e2ec;
+  background: #f8fafc;
+  border-right: 1px solid #cbd5e1;
+  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.16);
   overflow-y: auto;
   transition: width 0.18s ease;
 }
@@ -314,7 +315,7 @@ button, select, input {
 }
 
 .top-bar {
-  background: #ffffff;
+  background: #f8fafc
   border-bottom: 1px solid #d9e2ec;
   padding: 10px 14px;
   display: flex;
@@ -348,11 +349,12 @@ button, select, input {
 
 .mode-toggle button {
   padding: 8px 12px;
-  border: 1px solid #cbd2d9;
+  border: 1px solid #94a3b8;
   border-radius: 999px;
   background: #f8fafc;
   cursor: pointer;
   color: #334155;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .mode-toggle button.active.daily {

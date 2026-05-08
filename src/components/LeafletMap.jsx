@@ -32,6 +32,15 @@ const pinnedIcon = L.divIcon({
 });
 
 const BASEMAP_CONFIG = {
+  charcoal: {
+    base: {
+      url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
+      attribution: "&copy; Stadia Maps &copy; OpenMapTiles &copy; OpenStreetMap contributors",
+      subdomains: "abcd",
+      maxZoom: 20
+  },
+  labels: null
+},
   light: {
     base: {
       url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
