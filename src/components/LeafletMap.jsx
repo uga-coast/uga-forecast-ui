@@ -83,7 +83,7 @@ charcoal: {
 const RESCALE_MAP = {
   maxele: "0,9",
   storm_maxele: "0,9",
-  daily_maxele: "0,5",
+  daily_maxele: "0,6",
   swan_HS_max: "0,20"
 };
 
@@ -348,8 +348,21 @@ function getDisplayLayerConfig(layerConfig, hurricaneMeta) {
       ...layerConfig,
       legendTitle: "Water Level (ft, NAVD88)",
       legendGradient:
-        "linear-gradient(to right, rgb(0,0,255), rgb(0,80,255), rgb(0,130,255), rgb(0,200,255), rgb(0,255,180), rgb(0,255,0), rgb(255,255,0), rgb(255,140,0), rgb(255,0,0))",
-      legendTicks: ["0", "1", "2", "3", "4", "5+"]
+        "linear-gradient(to right, " +
+        "rgb(0,0,255), " +
+        "rgb(0,40,255), " +
+        "rgb(0,80,255), " +
+        "rgb(0,105,255), " +
+        "rgb(0,130,255), " +
+        "rgb(0,200,255), " +
+        "rgb(0,255,180), " +
+        "rgb(0,255,90), " +
+        "rgb(0,255,0), " +
+        "rgb(255,255,0), " +
+        "rgb(255,200,0), " +
+        "rgb(255,140,0), " +
+        "rgb(255,0,0))",
+      legendTicks: ["0", "1", "2", "3", "4", "5", "6+"]
     };
   }
 
