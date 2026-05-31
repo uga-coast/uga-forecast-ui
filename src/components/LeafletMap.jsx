@@ -376,6 +376,7 @@ export default function LeafletMap({
   basemap,
   pinnedValue,
   onPinValueChange,
+  pointHydrographEnabled,
   layerConfig,
   hurricaneMeta,
   runBaseUrl,
@@ -887,7 +888,7 @@ export default function LeafletMap({
           />
         )}
 
-        {pinnedValue?.latlng && (
+        {pointHydrographEnabled && pinnedValue?.latlng && (
           <Marker
             position={[pinnedValue.latlng.lat, pinnedValue.latlng.lng]}
             icon={pinnedIcon}

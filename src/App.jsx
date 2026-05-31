@@ -754,7 +754,13 @@ export default function App() {
           stationsVisible={stationsVisible}
           onStationsVisibleChange={setStationsVisible}
           pointHydrographEnabled={pointHydrographEnabled}
-          onPointHydrographEnabledChange={setPointHydrographEnabled}
+          onPointHydrographEnabledChange={(enabled) => {
+            setPointHydrographEnabled(enabled);
+            setPinnedValue({ text: "Click map to pin location", latlng: null });
+            setSelectedStation(null);
+            setSelectedPointForecastUrl(null);
+            setPinCopyStatus("");
+          }}
           opacity={opacity}
           onOpacityChange={setOpacity}
           basemap={basemap}
@@ -825,6 +831,7 @@ export default function App() {
               onRasterStatusChange={setRasterStatus}
               basemap={basemap}
               pinnedValue={pinnedValue}
+              pointHydrographEnabled={pointHydrographEnabled}
               onPinValueChange={(value) => {
                 setPinnedValue(value);
 
