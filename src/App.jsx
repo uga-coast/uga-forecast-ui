@@ -552,6 +552,20 @@ export default function App() {
     return rasterUrl.substring(0, rasterUrl.lastIndexOf("/"));
   }, [rasterUrl]);
 
+  const pointHydrographAvailable =
+    mode !== MODES.ARCHIVE &&
+    Boolean(runBaseUrl);
+
+  useEffect(() => {
+    if (!pointHydrographAvailable && pointHydrographEnabled) {
+      setPointHydrographEnabled(false);
+      setPinnedValue({ text: "Click map to pin location", latlng: null });
+      setSelectedStation(null);
+      setSelectedPointForecastUrl(null);
+      setPinCopyStatus("");
+    }
+  }, [pointHydrographAvailable, pointHydrographEnabled]);
+
   const forecastCycleTime = runMeta?.cycleTime ?? null;
   const advisory = runMeta?.advisory ?? null;
   const advisoryTime = runMeta?.advisoryTime ?? null;
@@ -754,6 +768,7 @@ export default function App() {
           stationsVisible={stationsVisible}
           onStationsVisibleChange={setStationsVisible}
           pointHydrographEnabled={pointHydrographEnabled}
+          pointHydrographAvailable={pointHydrographAvailable}
           onPointHydrographEnabledChange={(enabled) => {
             setPointHydrographEnabled(enabled);
             setPinnedValue({ text: "Click map to pin location", latlng: null });
@@ -840,7 +855,7 @@ export default function App() {
                   return;
                 }
 
-                if (!pointHydrographEnabled) {
+                if (!pointHydrographEnabled || !pointHydrographAvailable) {
                   return;
                 }
 

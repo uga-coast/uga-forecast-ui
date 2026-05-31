@@ -192,6 +192,7 @@ export default function Sidebar(props) {
     onStationsVisibleChange,
     pointHydrographEnabled,
     onPointHydrographEnabledChange,
+    pointHydrographAvailable,
     opacity,
     onOpacityChange,
     basemap,
@@ -391,30 +392,6 @@ export default function Sidebar(props) {
               <div className="field-help">Wave layer not available for this date/run.</div>
             ) : null}
           </SidebarSection>
-
-          <SidebarSection title="Overlays">
-            <div className="toggle-row">
-              <input
-                id="stations-toggle"
-                type="checkbox"
-                checked={stationsVisible}
-                onChange={(e) => onStationsVisibleChange(e.target.checked)}
-              />
-              <label htmlFor="stations-toggle">Show NOAA Stations</label>
-            </div>
-
-            <div className="toggle-row">
-              <input
-                id="point-hydrograph-toggle"
-                type="checkbox"
-                checked={pointHydrographEnabled}
-                onChange={(e) => onPointHydrographEnabledChange(e.target.checked)}
-              />
-              <label htmlFor="point-hydrograph-toggle">
-                Click Map for Hydrograph
-              </label>
-            </div>
-          </SidebarSection>
         </>
       ) : (
         <>
@@ -511,12 +488,19 @@ export default function Sidebar(props) {
             id="point-hydrograph-toggle"
             type="checkbox"
             checked={pointHydrographEnabled}
+            disabled={!pointHydrographAvailable}
             onChange={(e) => onPointHydrographEnabledChange(e.target.checked)}
           />
           <label htmlFor="point-hydrograph-toggle">
             Click Map for Hydrograph
           </label>
         </div>
+
+        {!pointHydrographAvailable && (
+          <div className="field-help">
+            Hydrographs unavailable for this run.
+          </div>
+        )}
 
         <label htmlFor="opacity-range">
           {layerConfig?.label || "Overlay"} Opacity: {opacity}%
