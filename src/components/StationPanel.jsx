@@ -582,9 +582,6 @@ function handleChartMouseLeave() {
 
       <div className="station-chart">
         <div className="chart-placeholder">
-          <div className="chart-title">
-            {isAdcircPoint ? "ADCIRC Forecast Water Level" : "Observed and Forecast Water Level"}
-          </div>
           <div className="chart-subtitle">
             {runMeta?.forecastType === "hurricane"
               ? `Advisory ${runMeta?.advisory || "—"} · Forecast cycle: ${forecastCycleTime ? formatUtcTimestamp(forecastCycleTime) : "—"}`
