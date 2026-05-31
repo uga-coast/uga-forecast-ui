@@ -16,6 +16,31 @@ const S3_BASE_URL = "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com";
 const MANIFEST_URL = `${S3_BASE_URL}/raster-manifest.json`;
 const MODES = { DAILY: "daily", HURRICANE: "hurricane", ARCHIVE: "archive" };
 
+const ADCIRC_TIMESERIES_API =
+  "https://tiles.gafloodforecast.com/adcirc/timeseries";
+
+function buildS3PrefixFromRunBaseUrl(runBaseUrl) {
+  if (!runBaseUrl) return null;
+
+  return runBaseUrl.replace(
+    "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com",
+    "s3://uga-coast-forecasting"
+  );
+}
+
+function buildClickedPointForecastUrl(runBaseUrl, latlng) {
+  const s3Prefix = buildS3PrefixFromRunBaseUrl(runBaseUrl);
+  if (!s3Prefix || !latlng) return null;
+
+  const params = new URLSearchParams({
+    s3_prefix: s3Prefix,
+    lat: String(latlng.lat),
+    lon: String(latlng.lng)
+  });
+
+  return `${ADCIRC_TIMESERIES_API}?${params.toString()}`;
+}
+
 function sortRuns(runs) {
   return [...runs].sort((a, b) => {
     const aStr = String(a).toLowerCase();
@@ -313,8 +338,10 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedRun, setSelectedRun] = useState("");
   const [stationsVisible, setStationsVisible] = useState(true);
+  const [pointHydrographEnabled, setPointHydrographEnabled] = useState(false);
   const [opacity, setOpacity] = useState(80);
   const [selectedStation, setSelectedStation] = useState(null);
+  const [selectedPointForecastUrl, setSelectedPointForecastUrl] = useState(null);
   const [panelHeight, setPanelHeight] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -583,6 +610,7 @@ export default function App() {
 
   function resetInteractiveState() {
     setSelectedStation(null);
+    setSelectedPointForecastUrl(null);
     setPinnedValue({ text: "Click map to pin location", latlng: null });
     setPinCopyStatus("");
   }
@@ -630,9 +658,7 @@ export default function App() {
 
     setMode(nextMode);
     setSelectedMesh(nextMesh);
-    setSelectedStation(null);
-    setPinnedValue({ text: "Click map to pin location", latlng: null });
-    setPinCopyStatus("");
+    resetInteractiveState();
     setSelectedDate("");
     setSelectedRun("");
     setSelectedHurricaneStorm("");
@@ -727,6 +753,8 @@ export default function App() {
           }}
           stationsVisible={stationsVisible}
           onStationsVisibleChange={setStationsVisible}
+          pointHydrographEnabled={pointHydrographEnabled}
+          onPointHydrographEnabledChange={setPointHydrographEnabled}
           opacity={opacity}
           onOpacityChange={setOpacity}
           basemap={basemap}
@@ -799,7 +827,30 @@ export default function App() {
               pinnedValue={pinnedValue}
               onPinValueChange={(value) => {
                 setPinnedValue(value);
-                if (!value?.latlng) setPinCopyStatus("");
+
+                if (!value?.latlng) {
+                  setPinCopyStatus("");
+                  return;
+                }
+
+                if (!pointHydrographEnabled) {
+                  return;
+                }
+
+                const forecastUrl = buildClickedPointForecastUrl(
+                  runBaseUrl,
+                  value.latlng
+                );
+
+                setSelectedPointForecastUrl(forecastUrl);
+
+                setSelectedStation({
+                  id: "clicked-point",
+                  name: "Selected Map Point",
+                  lat: value.latlng.lat,
+                  lon: value.latlng.lng,
+                  isAdcircPoint: true
+                });
               }}
               pinCopyStatus={pinCopyStatus}
               onPinCopyStatusChange={setPinCopyStatus}
@@ -819,10 +870,17 @@ export default function App() {
               {selectedStation ? (
                 <StationPanel
                   station={selectedStation}
-                  forecastJsonUrl={forecastJsonUrl}
+                  forecastJsonUrl={
+                    selectedStation?.isAdcircPoint
+                      ? selectedPointForecastUrl
+                      : forecastJsonUrl
+                  }
                   forecastCycleTime={forecastCycleTime}
                   runMeta={runMeta}
-                  onClose={() => setSelectedStation(null)}
+                  onClose={() => {
+                    setSelectedStation(null);
+                    setSelectedPointForecastUrl(null);
+                  }}
                   onResizeStart={() => setIsResizing(true)}
                 />
               ) : null}

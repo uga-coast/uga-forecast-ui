@@ -284,12 +284,14 @@ export default function StationPanel({
   const chartWidth = chartSize.width;
   const chartHeight = chartSize.height;
 
+  const isAdcircPoint = Boolean(station?.isAdcircPoint);
+
   const axisTickFontSize = Math.max(11, Math.min(14, Math.round(chartHeight * 0.055)));
   const axisLabelFontSize = Math.max(12, Math.min(16, Math.round(chartHeight * 0.065)));
   const tickLength = Math.max(5, Math.min(8, Math.round(chartHeight * 0.025)));
 
   useEffect(() => {
-    if (!station?.id || !forecastCycleTime) {
+    if (!station?.id || !forecastCycleTime || isAdcircPoint) {
       setNoaaData([]);
       setNoaaStatus("idle");
       return;
@@ -343,7 +345,7 @@ export default function StationPanel({
     return () => {
       cancelled = true;
     };
-  }, [station, forecastCycleTime]);
+  }, [station, forecastCycleTime, isAdcircPoint, runMeta]);
 
   useEffect(() => {
     if (!station?.id || !forecastJsonUrl) {
@@ -365,7 +367,10 @@ export default function StationPanel({
         const payload = await response.json();
         if (cancelled) return;
 
-        const stationForecast = payload?.[station.id];
+        const stationForecast = isAdcircPoint
+          ? payload
+          : payload?.[station.id];
+
         const series = normalizeForecastSeries(stationForecast);
 
         if (series.length) {
@@ -384,7 +389,7 @@ export default function StationPanel({
     return () => {
       cancelled = true;
     };
-  }, [station, forecastJsonUrl]);
+  }, [station, forecastJsonUrl, isAdcircPoint]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -525,7 +530,11 @@ function handleChartMouseLeave() {
       <div className="station-topbar">
         <div className="station-left">
           <strong className="station-name">{station.name}</strong>
-          <span className="station-id">ID: {station.id}</span>
+          <span className="station-id">
+            {isAdcircPoint
+              ? `Lat: ${station.lat.toFixed(4)} · Lon: ${station.lon.toFixed(4)}`
+              : `ID: ${station.id}`}
+          </span>
         </div>
 
         <div className="station-center">
@@ -543,23 +552,27 @@ function handleChartMouseLeave() {
             </span>
           </div>
 
-          <div className="metric">
-            <span className="metric-label">Latest Observed</span>
-            <span className="metric-value">
-              {noaaStatus === "loading" && "Loading..."}
-              {noaaStatus === "error" && "NOAA load failed"}
-              {noaaStatus === "empty" && "No data"}
-              {noaaStatus === "ready" && formatObservedValue(latestObservation)}
-              {noaaStatus === "idle" && "—"}
-            </span>
-          </div>
+          {!isAdcircPoint && (
+            <>
+              <div className="metric">
+                <span className="metric-label">Latest Observed</span>
+                <span className="metric-value">
+                  {noaaStatus === "loading" && "Loading..."}
+                  {noaaStatus === "error" && "NOAA load failed"}
+                  {noaaStatus === "empty" && "No data"}
+                  {noaaStatus === "ready" && formatObservedValue(latestObservation)}
+                  {noaaStatus === "idle" && "—"}
+                </span>
+              </div>
 
-          <div className="metric">
-            <span className="metric-label">Observed Time</span>
-            <span className="metric-value">
-              {noaaStatus === "ready" ? formatUtcTimestamp(latestObservation?.t) : "—"}
-            </span>
-          </div>
+              <div className="metric">
+                <span className="metric-label">Observed Time</span>
+                <span className="metric-value">
+                  {noaaStatus === "ready" ? formatUtcTimestamp(latestObservation?.t) : "—"}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <button className="station-close" onClick={onClose} type="button">
@@ -569,7 +582,9 @@ function handleChartMouseLeave() {
 
       <div className="station-chart">
         <div className="chart-placeholder">
-          <div className="chart-title">Observed and Forecast Water Level</div>
+          <div className="chart-title">
+            {isAdcircPoint ? "ADCIRC Forecast Water Level" : "Observed and Forecast Water Level"}
+          </div>
           <div className="chart-subtitle">
             {runMeta?.forecastType === "hurricane"
               ? `Advisory ${runMeta?.advisory || "—"} · Forecast cycle: ${forecastCycleTime ? formatUtcTimestamp(forecastCycleTime) : "—"}`
@@ -597,7 +612,11 @@ function handleChartMouseLeave() {
                 forecastStatus === "error" ||
                 forecastStatus === "ready" ||
                 forecastStatus === "idle") && (
-                <div className="chart-empty-state">No chart data available for this station</div>
+                <div className="chart-empty-state">
+                  {isAdcircPoint
+                    ? "Point hydrograph is not available for this run"
+                    : "No chart data available for this station"}
+                </div>
               )}
 
             {hasAnyChartData && (
@@ -731,7 +750,7 @@ function handleChartMouseLeave() {
                         strokeDasharray="4 4"
                       />
 
-                      {hoverData.observed && (
+                      {!isAdcircPoint && hoverData.observed && (
                         <circle
                           cx={scaleX(
                             hoverData.observed.date.getTime(),
@@ -822,10 +841,12 @@ function handleChartMouseLeave() {
                       <div className="chart-tooltip-time">
                         {formatTooltipTime(hoverData.timeMs)}
                       </div>
-                      <div>
-                        <strong>Observed:</strong>{" "}
-                        {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
-                      </div>
+                      {!isAdcircPoint && (
+                        <div>
+                          <strong>Observed:</strong>{" "}
+                          {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
+                        </div>
+                      )}
                       <div>
                         <strong>Forecast:</strong>{" "}
                         {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
@@ -834,10 +855,12 @@ function handleChartMouseLeave() {
                   )}
 
                   <div className="chart-legend-overlay">
-                    <div className="chart-legend-item">
-                      <span className="legend-line observed" />
-                      Observed
-                    </div>
+                    {!isAdcircPoint && (
+                      <div className="chart-legend-item">
+                        <span className="legend-line observed" />
+                        Observed
+                      </div>
+                    )}
                     <div className="chart-legend-item">
                       <span className="legend-line forecast" />
                       Forecast

@@ -190,6 +190,8 @@ export default function Sidebar(props) {
     latestRunOverall,
     stationsVisible,
     onStationsVisibleChange,
+    pointHydrographEnabled,
+    onPointHydrographEnabledChange,
     opacity,
     onOpacityChange,
     basemap,
@@ -393,12 +395,24 @@ export default function Sidebar(props) {
           <SidebarSection title="Overlays">
             <div className="toggle-row">
               <input
-                id="hurricane-track-toggle"
+                id="stations-toggle"
                 type="checkbox"
-                checked={showHurricaneTrackPoints}
-                onChange={(e) => onShowHurricaneTrackPointsChange(e.target.checked)}
+                checked={stationsVisible}
+                onChange={(e) => onStationsVisibleChange(e.target.checked)}
               />
-              <label htmlFor="hurricane-track-toggle">Show Track &amp; Points</label>
+              <label htmlFor="stations-toggle">Show NOAA Stations</label>
+            </div>
+
+            <div className="toggle-row">
+              <input
+                id="point-hydrograph-toggle"
+                type="checkbox"
+                checked={pointHydrographEnabled}
+                onChange={(e) => onPointHydrographEnabledChange(e.target.checked)}
+              />
+              <label htmlFor="point-hydrograph-toggle">
+                Click Map for Hydrograph
+              </label>
             </div>
           </SidebarSection>
         </>
@@ -480,7 +494,6 @@ export default function Sidebar(props) {
           <option value="charcoal">Charcoal</option>
           <option value="light">Light</option>
           <option value="topo">Topo</option>
-          
         </select>
 
         <div className="toggle-row">
@@ -493,9 +506,22 @@ export default function Sidebar(props) {
           <label htmlFor="stations-toggle">Show NOAA Stations</label>
         </div>
 
+        <div className="toggle-row">
+          <input
+            id="point-hydrograph-toggle"
+            type="checkbox"
+            checked={pointHydrographEnabled}
+            onChange={(e) => onPointHydrographEnabledChange(e.target.checked)}
+          />
+          <label htmlFor="point-hydrograph-toggle">
+            Click Map for Hydrograph
+          </label>
+        </div>
+
         <label htmlFor="opacity-range">
           {layerConfig?.label || "Overlay"} Opacity: {opacity}%
         </label>
+
         <input
           id="opacity-range"
           type="range"
