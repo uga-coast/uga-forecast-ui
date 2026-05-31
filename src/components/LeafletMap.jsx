@@ -390,6 +390,23 @@ export default function LeafletMap({
   const currentBasemapLabels = currentBasemap.labels;
 
   const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const container = mapRef.current.getContainer();
+
+    if (pointHydrographEnabled) {
+      container.style.cursor = "crosshair";
+    } else {
+      container.style.cursor = "";
+    }
+
+    return () => {
+      container.style.cursor = "";
+    };
+  }, [pointHydrographEnabled]);
+
   const coneLayerRef = useRef(null);
   const officialTrackLayerRef = useRef(null);
   const simTrackLayerRef = useRef(null);
