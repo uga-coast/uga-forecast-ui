@@ -518,16 +518,32 @@ export default function StationPanel({
     );
   }, [observedSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
 
+  const bridgedAnalysisSeries = useMemo(() => {
+    if (!analysisSeries.length || !forecastSeries.length) return analysisSeries;
+
+    const lastAnalysis = analysisSeries[analysisSeries.length - 1];
+    const firstForecast = forecastSeries[0];
+
+    const gapMs = firstForecast.date.getTime() - lastAnalysis.date.getTime();
+    const maxBridgeGapMs = 3 * 60 * 60 * 1000; // allow up to 3 hours
+
+    if (gapMs > 0 && gapMs <= maxBridgeGapMs) {
+      return [...analysisSeries, firstForecast];
+    }
+
+    return analysisSeries;
+  }, [analysisSeries, forecastSeries]);
+
   const analysisPolyline = useMemo(() => {
     return buildTimePolyline(
-      analysisSeries,
+      bridgedAnalysisSeries,
       chartWidth,
       chartHeight,
       margin,
       timeDomain,
       chartStats
     );
-  }, [analysisSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
+  }, [bridgedAnalysisSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
 
   const forecastPolyline = useMemo(() => {
     return buildTimePolyline(
