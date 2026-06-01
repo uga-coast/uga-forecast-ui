@@ -777,11 +777,15 @@ button, select, input {
 }
 
 .legend-line.observed {
-  background: #2563eb;
+  background: #9ca3af;
+}
+
+.legend-line.analysis {
+  background: #111827;
 }
 
 .legend-line.forecast {
-  background: #dc2626;
+  background: #2563eb;
 }
 
 .map-shell {

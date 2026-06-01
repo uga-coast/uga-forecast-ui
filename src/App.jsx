@@ -41,6 +41,19 @@ function buildClickedPointForecastUrl(runBaseUrl, latlng) {
   return `${ADCIRC_TIMESERIES_API}?${params.toString()}`;
 }
 
+function buildStationAnalysisUrl(runBaseUrl, stationId) {
+  const s3Prefix = buildS3PrefixFromRunBaseUrl(runBaseUrl);
+  if (!s3Prefix || !stationId) return null;
+
+  const params = new URLSearchParams({
+    s3_prefix: s3Prefix,
+    station_id: String(stationId),
+    hours: "48"
+  });
+
+  return `${ADCIRC_TIMESERIES_API.replace("/timeseries", "/station-analysis")}?${params.toString()}`;
+}
+
 function sortRuns(runs) {
   return [...runs].sort((a, b) => {
     const aStr = String(a).toLowerCase();
@@ -246,7 +259,7 @@ function buildDailyForecastJsonUrl(manifest, selectedMesh, selectedDate, selecte
     selectedRun,
     daily.model,
     "forecast",
-    "station_WSE_forecast.json"
+    "station_WSE.json"
   ].join("/");
 }
 
@@ -279,7 +292,7 @@ function buildHurricaneForecastJsonUrl(
     section.model,
     "forecast",
     selectedRun,
-    "station_WSE_forecast.json"
+    "station_WSE.json"
   ].join("/");
 }
 
@@ -733,6 +746,11 @@ export default function App() {
     runMeta
   ]);
 
+  const analysisJsonUrl = useMemo(() => {
+    if (!selectedStation || selectedStation?.isAdcircPoint) return null;
+    return buildStationAnalysisUrl(runBaseUrl, selectedStation.id);
+  }, [selectedStation, runBaseUrl]);
+
   console.log({
     mode,
     selectedMesh,
@@ -897,6 +915,7 @@ export default function App() {
                       ? selectedPointForecastUrl
                       : forecastJsonUrl
                   }
+                  analysisJsonUrl={analysisJsonUrl}
                   forecastCycleTime={forecastCycleTime}
                   runMeta={runMeta}
                   onClose={() => {

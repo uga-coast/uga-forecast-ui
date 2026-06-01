@@ -134,8 +134,8 @@ function normalizeForecastSeries(stationForecast) {
   return rows;
 }
 
-function getChartStats(observedSeries, forecastSeries) {
-  const values = [...observedSeries, ...forecastSeries]
+function getChartStats(observedSeries, forecastSeries, analysisSeries = []) {
+  const values = [...observedSeries, ...forecastSeries, ...analysisSeries]
     .map((d) => d.value)
     .filter((v) => Number.isFinite(v));
 
@@ -156,8 +156,8 @@ function getChartStats(observedSeries, forecastSeries) {
   return { min, max };
 }
 
-function getTimeDomain(observedSeries, forecastSeries) {
-  const dates = [...observedSeries, ...forecastSeries]
+function getTimeDomain(observedSeries, forecastSeries, analysisSeries = []) {
+  const dates = [...observedSeries, ...forecastSeries, ...analysisSeries]
     .map((d) => d.date.getTime())
     .filter(Number.isFinite);
 
@@ -264,6 +264,7 @@ function buildTimeTicks(domain, stepHours = 6) {
 export default function StationPanel({
   station,
   forecastJsonUrl,
+  analysisJsonUrl,
   forecastCycleTime,
   runMeta,
   onClose,
@@ -275,6 +276,9 @@ export default function StationPanel({
 
   const [forecastSeries, setForecastSeries] = useState([]);
   const [forecastStatus, setForecastStatus] = useState("idle");
+
+  const [analysisSeries, setAnalysisSeries] = useState([]);
+  const [analysisStatus, setAnalysisStatus] = useState("idle");
 
   const [hoverData, setHoverData] = useState(null);
 
@@ -392,6 +396,46 @@ export default function StationPanel({
   }, [station, forecastJsonUrl, isAdcircPoint]);
 
   useEffect(() => {
+    if (!station?.id || !analysisJsonUrl || isAdcircPoint) {
+      setAnalysisSeries([]);
+      setAnalysisStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchAnalysisData() {
+      setAnalysisStatus("loading");
+      setAnalysisSeries([]);
+
+      try {
+        const response = await fetch(analysisJsonUrl);
+        if (!response.ok) throw new Error("Analysis JSON not found");
+
+        const payload = await response.json();
+        if (cancelled) return;
+
+        const series = normalizeForecastSeries(payload?.analysis);
+
+        if (series.length) {
+          setAnalysisSeries(series);
+          setAnalysisStatus("ready");
+        } else {
+          setAnalysisStatus("empty");
+        }
+      } catch {
+        if (!cancelled) setAnalysisStatus("error");
+      }
+    }
+
+    fetchAnalysisData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [station, analysisJsonUrl, isAdcircPoint]);
+
+  useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const el = chartContainerRef.current;
@@ -448,8 +492,8 @@ export default function StationPanel({
   };
 
   const chartStats = useMemo(
-    () => getChartStats(observedSeries, forecastSeries),
-    [observedSeries, forecastSeries]
+    () => getChartStats(observedSeries, forecastSeries, analysisSeries),
+    [observedSeries, forecastSeries, analysisSeries]
   );
 
   const yTickStep = useMemo(() => {
@@ -460,8 +504,8 @@ export default function StationPanel({
   const selectionKey = `${station?.id || ""}|${forecastJsonUrl || ""}|${forecastCycleTime || ""}`;
 
   const timeDomain = useMemo(() => {
-    return getTimeDomain(observedSeries, forecastSeries);
-  }, [selectionKey, observedSeries, forecastSeries]);
+    return getTimeDomain(observedSeries, forecastSeries, analysisSeries);
+  }, [selectionKey, observedSeries, forecastSeries, analysisSeries]);
 
   const observedPolyline = useMemo(() => {
     return buildTimePolyline(
@@ -473,6 +517,17 @@ export default function StationPanel({
       chartStats
     );
   }, [observedSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
+
+  const analysisPolyline = useMemo(() => {
+    return buildTimePolyline(
+      analysisSeries,
+      chartWidth,
+      chartHeight,
+      margin,
+      timeDomain,
+      chartStats
+    );
+  }, [analysisSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
 
   const forecastPolyline = useMemo(() => {
     return buildTimePolyline(
@@ -495,7 +550,7 @@ export default function StationPanel({
     [timeDomain, xTickStepHours]
   );
 
-  const hasAnyChartData = Boolean(observedPolyline || forecastPolyline);
+  const hasAnyChartData = Boolean(observedPolyline || analysisPolyline || forecastPolyline);
 
   function handleChartMouseMove(event) {
     if (!timeDomain || !chartStats) return;
@@ -513,6 +568,7 @@ export default function StationPanel({
       mouseX,
       mouseY: event.clientY - rect.top,
       observed: findNearestPoint(observedSeries, timeMs),
+      analysis: findNearestPoint(analysisSeries, timeMs),
       forecast: findNearestPoint(forecastSeries, timeMs)
     });
 }
@@ -717,21 +773,30 @@ function handleChartMouseLeave() {
                     />
                   )}
 
-                  {forecastPolyline && (
+                  {observedPolyline && (
                     <polyline
-                      fill="none"
-                      stroke="#dc2626"
+                      fill="none"  
+                      stroke="#9ca3af"
                       strokeWidth="3"
-                      points={forecastPolyline}
+                      points={observedPolyline}
                     />
                   )}
 
-                  {observedPolyline && (
+                  {analysisPolyline && (
+                    <polyline
+                      fill="none"
+                      stroke="#111827"
+                      strokeWidth="3"
+                      points={analysisPolyline}
+                    />
+                  )}
+
+                  {forecastPolyline && (
                     <polyline
                       fill="none"
                       stroke="#2563eb"
                       strokeWidth="3"
-                      points={observedPolyline}
+                      points={forecastPolyline}
                     />
                   )}
 
@@ -762,7 +827,26 @@ function handleChartMouseLeave() {
                             margin
                           )}
                           r="4"
-                          fill="#2563eb"
+                          fill="#9ca3af"
+                        />
+                      )}
+
+                      {!isAdcircPoint && hoverData.analysis && (
+                        <circle
+                          cx={scaleX(
+                            hoverData.analysis.date.getTime(),
+                            timeDomain,
+                            chartWidth,
+                            margin
+                          )}
+                          cy={scaleY(
+                            hoverData.analysis.value,
+                            chartStats,
+                            chartHeight,
+                            margin
+                          )}
+                          r="4"
+                          fill="#111827"
                         />
                       )}
 
@@ -781,7 +865,7 @@ function handleChartMouseLeave() {
                             margin
                           )}
                           r="4"
-                          fill="#dc2626"
+                          fill="#2563eb"
                         />
                       )}
                     </>
@@ -844,6 +928,12 @@ function handleChartMouseLeave() {
                           {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
                         </div>
                       )}
+                      {!isAdcircPoint && (
+                        <div>
+                          <strong>Analysis:</strong>{" "}
+                          {hoverData.analysis ? formatForecastValue(hoverData.analysis.value) : "—"}
+                        </div>
+                      )}
                       <div>
                         <strong>Forecast:</strong>{" "}
                         {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
@@ -856,6 +946,12 @@ function handleChartMouseLeave() {
                       <div className="chart-legend-item">
                         <span className="legend-line observed" />
                         Observed
+                      </div>
+                    )}
+                    {!isAdcircPoint && (
+                      <div className="chart-legend-item">
+                        <span className="legend-line analysis" />
+                        Analysis
                       </div>
                     )}
                     <div className="chart-legend-item">
