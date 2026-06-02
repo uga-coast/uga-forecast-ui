@@ -1,8 +1,6 @@
 export const stations = [
   { id: "8670870", name: "Fort Pulaski", lat: 32.0346, lon: -80.9025 },
-  { id: "8665530", name: "Charleston", lat: 32.781, lon: -79.925 },
-  { id: "8720030", name: "Fernandina Beach", lat: 30.6717, lon: -81.4667 },
-  { id: "8721604", name: "Trident Pier", lat: 28.4158, lon: -80.5932 }
+  { id: "8720030", name: "Fernandina Beach", lat: 30.6717, lon: -81.4667 }
   
 ];
 
