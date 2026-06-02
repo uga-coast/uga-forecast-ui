@@ -134,8 +134,8 @@ function normalizeForecastSeries(stationForecast) {
   return rows;
 }
 
-function getChartStats(observedSeries, forecastSeries) {
-  const values = [...observedSeries, ...forecastSeries]
+function getChartStats(observedSeries, forecastSeries, analysisSeries = []) {
+  const values = [...observedSeries, ...forecastSeries, ...analysisSeries]
     .map((d) => d.value)
     .filter((v) => Number.isFinite(v));
 
@@ -156,8 +156,8 @@ function getChartStats(observedSeries, forecastSeries) {
   return { min, max };
 }
 
-function getTimeDomain(observedSeries, forecastSeries) {
-  const dates = [...observedSeries, ...forecastSeries]
+function getTimeDomain(observedSeries, forecastSeries, analysisSeries = []) {
+  const dates = [...observedSeries, ...forecastSeries, ...analysisSeries]
     .map((d) => d.date.getTime())
     .filter(Number.isFinite);
 
@@ -264,6 +264,7 @@ function buildTimeTicks(domain, stepHours = 6) {
 export default function StationPanel({
   station,
   forecastJsonUrl,
+  analysisJsonUrl,
   forecastCycleTime,
   runMeta,
   onClose,
@@ -276,6 +277,9 @@ export default function StationPanel({
   const [forecastSeries, setForecastSeries] = useState([]);
   const [forecastStatus, setForecastStatus] = useState("idle");
 
+  const [analysisSeries, setAnalysisSeries] = useState([]);
+  const [analysisStatus, setAnalysisStatus] = useState("idle");
+
   const [hoverData, setHoverData] = useState(null);
 
   const chartContainerRef = useRef(null);
@@ -284,12 +288,14 @@ export default function StationPanel({
   const chartWidth = chartSize.width;
   const chartHeight = chartSize.height;
 
+  const isAdcircPoint = Boolean(station?.isAdcircPoint);
+
   const axisTickFontSize = Math.max(11, Math.min(14, Math.round(chartHeight * 0.055)));
   const axisLabelFontSize = Math.max(12, Math.min(16, Math.round(chartHeight * 0.065)));
   const tickLength = Math.max(5, Math.min(8, Math.round(chartHeight * 0.025)));
 
   useEffect(() => {
-    if (!station?.id || !forecastCycleTime) {
+    if (!station?.id || !forecastCycleTime || isAdcircPoint) {
       setNoaaData([]);
       setNoaaStatus("idle");
       return;
@@ -343,7 +349,7 @@ export default function StationPanel({
     return () => {
       cancelled = true;
     };
-  }, [station, forecastCycleTime]);
+  }, [station, forecastCycleTime, isAdcircPoint, runMeta]);
 
   useEffect(() => {
     if (!station?.id || !forecastJsonUrl) {
@@ -365,7 +371,10 @@ export default function StationPanel({
         const payload = await response.json();
         if (cancelled) return;
 
-        const stationForecast = payload?.[station.id];
+        const stationForecast = isAdcircPoint
+          ? payload
+          : payload?.[station.id];
+
         const series = normalizeForecastSeries(stationForecast);
 
         if (series.length) {
@@ -384,7 +393,47 @@ export default function StationPanel({
     return () => {
       cancelled = true;
     };
-  }, [station, forecastJsonUrl]);
+  }, [station, forecastJsonUrl, isAdcircPoint]);
+
+  useEffect(() => {
+    if (!station?.id || !analysisJsonUrl || isAdcircPoint) {
+      setAnalysisSeries([]);
+      setAnalysisStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchAnalysisData() {
+      setAnalysisStatus("loading");
+      setAnalysisSeries([]);
+
+      try {
+        const response = await fetch(analysisJsonUrl);
+        if (!response.ok) throw new Error("Analysis JSON not found");
+
+        const payload = await response.json();
+        if (cancelled) return;
+
+        const series = normalizeForecastSeries(payload?.analysis);
+
+        if (series.length) {
+          setAnalysisSeries(series);
+          setAnalysisStatus("ready");
+        } else {
+          setAnalysisStatus("empty");
+        }
+      } catch {
+        if (!cancelled) setAnalysisStatus("error");
+      }
+    }
+
+    fetchAnalysisData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [station, analysisJsonUrl, isAdcircPoint]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -443,8 +492,8 @@ export default function StationPanel({
   };
 
   const chartStats = useMemo(
-    () => getChartStats(observedSeries, forecastSeries),
-    [observedSeries, forecastSeries]
+    () => getChartStats(observedSeries, forecastSeries, analysisSeries),
+    [observedSeries, forecastSeries, analysisSeries]
   );
 
   const yTickStep = useMemo(() => {
@@ -455,8 +504,8 @@ export default function StationPanel({
   const selectionKey = `${station?.id || ""}|${forecastJsonUrl || ""}|${forecastCycleTime || ""}`;
 
   const timeDomain = useMemo(() => {
-    return getTimeDomain(observedSeries, forecastSeries);
-  }, [selectionKey, observedSeries, forecastSeries]);
+    return getTimeDomain(observedSeries, forecastSeries, analysisSeries);
+  }, [selectionKey, observedSeries, forecastSeries, analysisSeries]);
 
   const observedPolyline = useMemo(() => {
     return buildTimePolyline(
@@ -468,6 +517,33 @@ export default function StationPanel({
       chartStats
     );
   }, [observedSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
+
+  const bridgedAnalysisSeries = useMemo(() => {
+    if (!analysisSeries.length || !forecastSeries.length) return analysisSeries;
+
+    const lastAnalysis = analysisSeries[analysisSeries.length - 1];
+    const firstForecast = forecastSeries[0];
+
+    const gapMs = firstForecast.date.getTime() - lastAnalysis.date.getTime();
+    const maxBridgeGapMs = 3 * 60 * 60 * 1000; // allow up to 3 hours
+
+    if (gapMs > 0 && gapMs <= maxBridgeGapMs) {
+      return [...analysisSeries, firstForecast];
+    }
+
+    return analysisSeries;
+  }, [analysisSeries, forecastSeries]);
+
+  const analysisPolyline = useMemo(() => {
+    return buildTimePolyline(
+      bridgedAnalysisSeries,
+      chartWidth,
+      chartHeight,
+      margin,
+      timeDomain,
+      chartStats
+    );
+  }, [bridgedAnalysisSeries, chartWidth, chartHeight, margin, timeDomain, chartStats]);
 
   const forecastPolyline = useMemo(() => {
     return buildTimePolyline(
@@ -490,7 +566,7 @@ export default function StationPanel({
     [timeDomain, xTickStepHours]
   );
 
-  const hasAnyChartData = Boolean(observedPolyline || forecastPolyline);
+  const hasAnyChartData = Boolean(observedPolyline || analysisPolyline || forecastPolyline);
 
   function handleChartMouseMove(event) {
     if (!timeDomain || !chartStats) return;
@@ -508,6 +584,7 @@ export default function StationPanel({
       mouseX,
       mouseY: event.clientY - rect.top,
       observed: findNearestPoint(observedSeries, timeMs),
+      analysis: findNearestPoint(analysisSeries, timeMs),
       forecast: findNearestPoint(forecastSeries, timeMs)
     });
 }
@@ -525,7 +602,11 @@ function handleChartMouseLeave() {
       <div className="station-topbar">
         <div className="station-left">
           <strong className="station-name">{station.name}</strong>
-          <span className="station-id">ID: {station.id}</span>
+          <span className="station-id">
+            {isAdcircPoint
+              ? `Lat: ${station.lat.toFixed(4)} · Lon: ${station.lon.toFixed(4)}`
+              : `ID: ${station.id}`}
+          </span>
         </div>
 
         <div className="station-center">
@@ -543,23 +624,27 @@ function handleChartMouseLeave() {
             </span>
           </div>
 
-          <div className="metric">
-            <span className="metric-label">Latest Observed</span>
-            <span className="metric-value">
-              {noaaStatus === "loading" && "Loading..."}
-              {noaaStatus === "error" && "NOAA load failed"}
-              {noaaStatus === "empty" && "No data"}
-              {noaaStatus === "ready" && formatObservedValue(latestObservation)}
-              {noaaStatus === "idle" && "—"}
-            </span>
-          </div>
+          {!isAdcircPoint && (
+            <>
+              <div className="metric">
+                <span className="metric-label">Latest Observed</span>
+                <span className="metric-value">
+                  {noaaStatus === "loading" && "Loading..."}
+                  {noaaStatus === "error" && "NOAA load failed"}
+                  {noaaStatus === "empty" && "No data"}
+                  {noaaStatus === "ready" && formatObservedValue(latestObservation)}
+                  {noaaStatus === "idle" && "—"}
+                </span>
+              </div>
 
-          <div className="metric">
-            <span className="metric-label">Observed Time</span>
-            <span className="metric-value">
-              {noaaStatus === "ready" ? formatUtcTimestamp(latestObservation?.t) : "—"}
-            </span>
-          </div>
+              <div className="metric">
+                <span className="metric-label">Observed Time</span>
+                <span className="metric-value">
+                  {noaaStatus === "ready" ? formatUtcTimestamp(latestObservation?.t) : "—"}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <button className="station-close" onClick={onClose} type="button">
@@ -569,7 +654,6 @@ function handleChartMouseLeave() {
 
       <div className="station-chart">
         <div className="chart-placeholder">
-          <div className="chart-title">Observed and Forecast Water Level</div>
           <div className="chart-subtitle">
             {runMeta?.forecastType === "hurricane"
               ? `Advisory ${runMeta?.advisory || "—"} · Forecast cycle: ${forecastCycleTime ? formatUtcTimestamp(forecastCycleTime) : "—"}`
@@ -597,7 +681,11 @@ function handleChartMouseLeave() {
                 forecastStatus === "error" ||
                 forecastStatus === "ready" ||
                 forecastStatus === "idle") && (
-                <div className="chart-empty-state">No chart data available for this station</div>
+                <div className="chart-empty-state">
+                  {isAdcircPoint
+                    ? "Point hydrograph is not available for this run"
+                    : "No chart data available for this station"}
+                </div>
               )}
 
             {hasAnyChartData && (
@@ -701,21 +789,30 @@ function handleChartMouseLeave() {
                     />
                   )}
 
-                  {forecastPolyline && (
+                  {observedPolyline && (
                     <polyline
-                      fill="none"
-                      stroke="#dc2626"
+                      fill="none"  
+                      stroke="#9ca3af"
                       strokeWidth="3"
-                      points={forecastPolyline}
+                      points={observedPolyline}
                     />
                   )}
 
-                  {observedPolyline && (
+                  {analysisPolyline && (
+                    <polyline
+                      fill="none"
+                      stroke="#111827"
+                      strokeWidth="3"
+                      points={analysisPolyline}
+                    />
+                  )}
+
+                  {forecastPolyline && (
                     <polyline
                       fill="none"
                       stroke="#2563eb"
                       strokeWidth="3"
-                      points={observedPolyline}
+                      points={forecastPolyline}
                     />
                   )}
 
@@ -731,7 +828,7 @@ function handleChartMouseLeave() {
                         strokeDasharray="4 4"
                       />
 
-                      {hoverData.observed && (
+                      {!isAdcircPoint && hoverData.observed && (
                         <circle
                           cx={scaleX(
                             hoverData.observed.date.getTime(),
@@ -746,7 +843,26 @@ function handleChartMouseLeave() {
                             margin
                           )}
                           r="4"
-                          fill="#2563eb"
+                          fill="#9ca3af"
+                        />
+                      )}
+
+                      {!isAdcircPoint && hoverData.analysis && (
+                        <circle
+                          cx={scaleX(
+                            hoverData.analysis.date.getTime(),
+                            timeDomain,
+                            chartWidth,
+                            margin
+                          )}
+                          cy={scaleY(
+                            hoverData.analysis.value,
+                            chartStats,
+                            chartHeight,
+                            margin
+                          )}
+                          r="4"
+                          fill="#111827"
                         />
                       )}
 
@@ -765,7 +881,7 @@ function handleChartMouseLeave() {
                             margin
                           )}
                           r="4"
-                          fill="#dc2626"
+                          fill="#2563eb"
                         />
                       )}
                     </>
@@ -822,10 +938,18 @@ function handleChartMouseLeave() {
                       <div className="chart-tooltip-time">
                         {formatTooltipTime(hoverData.timeMs)}
                       </div>
-                      <div>
-                        <strong>Observed:</strong>{" "}
-                        {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
-                      </div>
+                      {!isAdcircPoint && (
+                        <div>
+                          <strong>Observed:</strong>{" "}
+                          {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
+                        </div>
+                      )}
+                      {!isAdcircPoint && (
+                        <div>
+                          <strong>Analysis:</strong>{" "}
+                          {hoverData.analysis ? formatForecastValue(hoverData.analysis.value) : "—"}
+                        </div>
+                      )}
                       <div>
                         <strong>Forecast:</strong>{" "}
                         {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
@@ -834,10 +958,18 @@ function handleChartMouseLeave() {
                   )}
 
                   <div className="chart-legend-overlay">
-                    <div className="chart-legend-item">
-                      <span className="legend-line observed" />
-                      Observed
-                    </div>
+                    {!isAdcircPoint && (
+                      <div className="chart-legend-item">
+                        <span className="legend-line observed" />
+                        Observed
+                      </div>
+                    )}
+                    {!isAdcircPoint && (
+                      <div className="chart-legend-item">
+                        <span className="legend-line analysis" />
+                        Analysis
+                      </div>
+                    )}
                     <div className="chart-legend-item">
                       <span className="legend-line forecast" />
                       Forecast

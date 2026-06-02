@@ -190,6 +190,9 @@ export default function Sidebar(props) {
     latestRunOverall,
     stationsVisible,
     onStationsVisibleChange,
+    pointHydrographEnabled,
+    onPointHydrographEnabledChange,
+    pointHydrographAvailable,
     opacity,
     onOpacityChange,
     basemap,
@@ -389,18 +392,6 @@ export default function Sidebar(props) {
               <div className="field-help">Wave layer not available for this date/run.</div>
             ) : null}
           </SidebarSection>
-
-          <SidebarSection title="Overlays">
-            <div className="toggle-row">
-              <input
-                id="hurricane-track-toggle"
-                type="checkbox"
-                checked={showHurricaneTrackPoints}
-                onChange={(e) => onShowHurricaneTrackPointsChange(e.target.checked)}
-              />
-              <label htmlFor="hurricane-track-toggle">Show Track &amp; Points</label>
-            </div>
-          </SidebarSection>
         </>
       ) : (
         <>
@@ -480,7 +471,6 @@ export default function Sidebar(props) {
           <option value="charcoal">Charcoal</option>
           <option value="light">Light</option>
           <option value="topo">Topo</option>
-          
         </select>
 
         <div className="toggle-row">
@@ -493,9 +483,29 @@ export default function Sidebar(props) {
           <label htmlFor="stations-toggle">Show NOAA Stations</label>
         </div>
 
+        <div className="toggle-row">
+          <input
+            id="point-hydrograph-toggle"
+            type="checkbox"
+            checked={pointHydrographEnabled}
+            disabled={!pointHydrographAvailable}
+            onChange={(e) => onPointHydrographEnabledChange(e.target.checked)}
+          />
+          <label htmlFor="point-hydrograph-toggle">
+            Click Map for Hydrograph
+          </label>
+        </div>
+
+        {!pointHydrographAvailable && (
+          <div className="field-help">
+            Hydrographs unavailable for this run.
+          </div>
+        )}
+
         <label htmlFor="opacity-range">
           {layerConfig?.label || "Overlay"} Opacity: {opacity}%
         </label>
+
         <input
           id="opacity-range"
           type="range"

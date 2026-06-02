@@ -709,6 +709,10 @@ button, select, input {
   flex: 0 0 auto;
 }
 
+.chart-subtitle {
+  margin-bottom: 12px;
+}
+
 .chart-box {
   flex: 1;
   min-height: 180px;
@@ -773,11 +777,15 @@ button, select, input {
 }
 
 .legend-line.observed {
-  background: #2563eb;
+  background: #9ca3af;
+}
+
+.legend-line.analysis {
+  background: #111827;
 }
 
 .legend-line.forecast {
-  background: #dc2626;
+  background: #2563eb;
 }
 
 .map-shell {
