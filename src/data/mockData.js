@@ -1,7 +1,8 @@
 export const stations = [
+  { id: "8665530", name: "Charleston", lat: 32.781667, lon: -79.923333 }, 
   { id: "8670870", name: "Fort Pulaski", lat: 32.0346, lon: -80.9025 },
-  { id: "8720030", name: "Fernandina Beach", lat: 30.6717, lon: -81.4667 }
-  
+  { id: "8720030", name: "Fernandina Beach", lat: 30.6717, lon: -81.4667 },
+  { id: "8720218", name: "Mayport", lat: 30.39833, lon: -81.42833 }
 ];
 
 export const archiveYears = ["2025", "2024", "2023"];
