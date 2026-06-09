@@ -378,6 +378,19 @@ export default function App() {
     archiveAdvisoriesByStorm[archiveStormsByYear[archiveYears[0]][0]][0]
   );
 
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  const [showContact, setShowContact] = useState(false);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem("forecastDisclaimerAccepted");
+
+    if (!dismissed) {
+      setShowDisclaimer(true);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -642,6 +655,14 @@ export default function App() {
     setPinCopyStatus("");
   }
 
+  function handleDisclaimerContinue() {
+    if (dontShowAgain) {
+      localStorage.setItem("forecastDisclaimerAccepted", "true");
+    }
+
+    setShowDisclaimer(false);
+  }
+
   function handleDateChange(date) {
     const fallbackDate = liveDates.includes(date) ? date : liveDates[0];
     const nextRuns = sortRuns(runsByDate[fallbackDate] || []);
@@ -763,6 +784,81 @@ export default function App() {
 
   return (
     <div className="app-page">
+    {showDisclaimer && (
+      <div className="disclaimer-overlay">
+        <div className="disclaimer-modal">
+          <h2>Experimental Research Product</h2>
+
+          <p>
+            This website provides experimental flood forecast information,
+            model results, and related data products for research,
+            evaluation, and demonstration purposes only.
+          </p>
+
+          <p>
+            The information presented is under active development and may
+            contain errors, omissions, inaccuracies, or interruptions in
+            service.
+          </p>
+
+          <p>
+            This website is not an operational forecasting system
+            and should not be used for emergency management,
+            public safety, evacuation planning, navigation, regulatory
+            compliance, or any other decision-making purposes.
+          </p>
+
+          <p>
+            Users should rely on official sources, including the National
+            Weather Service, local emergency management agencies, and other
+            authorized organizations for forecasts, warnings, and safety
+            information.
+          </p>
+
+          <label className="disclaimer-checkbox">
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={(e) => setDontShowAgain(e.target.checked)}
+            />
+            Don't show this message again on this device
+          </label>
+
+          <button
+            className="disclaimer-button"
+            onClick={handleDisclaimerContinue}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    )}
+    {showContact && (
+      <div className="disclaimer-overlay">
+        <div className="disclaimer-modal contact-modal">
+          <h2>Contact</h2>
+          <p>
+            Questions, feedback, bug reports, or collaboration inquiries:
+          </p>
+          <p>
+            <strong>Matthew V. Bilskie</strong><br />
+            University of Georgia<br />
+            College of Engineering
+          </p>
+          <p>
+            <a href="mailto:mbilskie@uga.edu">
+              mbilskie@uga.edu
+            </a>
+          </p>
+          <button
+            className="disclaimer-button"
+            onClick={() => setShowContact(false)}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    )}
       <Header />
       <div className="app-shell">
         <Sidebar
@@ -929,6 +1025,12 @@ export default function App() {
           </div>
         </div>
       </div>
+      <button
+      className="floating-contact-button"
+      onClick={() => setShowContact(true)}
+    >
+      Contact
+    </button>
     </div>
   );
 }
