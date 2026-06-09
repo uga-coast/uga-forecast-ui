@@ -1025,21 +1025,23 @@ export default function App() {
           </div>
         </div>
       </div>
-      <div className="floating-button-stack">
-        <button
-          className="floating-action-button"
-          onClick={() => setShowDisclaimer(true)}
-        >
-          Disclaimer
-        </button>
+      {!selectedStation && (
+        <div className="floating-button-stack">
+          <button
+            className="floating-action-button"
+            onClick={() => setShowDisclaimer(true)}
+          >
+            Disclaimer
+          </button>
 
-        <button
-          className="floating-action-button"
-          onClick={() => setShowContact(true)}
-        >
-          Contact
-        </button>
-      </div>
+          <button
+            className="floating-action-button"
+            onClick={() => setShowContact(true)}
+          >
+            Contact
+          </button>
+        </div>
+      )}
     </div>
   );
 }
