@@ -957,6 +957,7 @@ export default function App() {
 
           <div className="content-area" ref={contentRef}>
             <LeafletMap
+              selectedMesh={selectedMesh}
               stations={activeStations}
               stationsVisible={stationsVisible}
               opacity={opacity}
