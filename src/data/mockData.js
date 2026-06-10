@@ -1,6 +1,5 @@
 export const STATIONS_BY_REGION = {
   "Georgia": [
-    { id: "8771341", name: "Galveston Bay Entrance, North Jetty", lat: 29.356667, lon: -94.725000},
     { id: "8665530", name: "Charleston", lat: 32.781667, lon: -79.923333 },
     { id: "8670870", name: "Fort Pulaski", lat: 32.0346, lon: -80.9025 },
     { id: "8720030", name: "Fernandina Beach", lat: 30.6717, lon: -81.4667 },
@@ -8,6 +7,7 @@ export const STATIONS_BY_REGION = {
   ],
 
   "Western North Atlantic": [
+    { id: "8771341", name: "Galveston Bay Entrance, North Jetty", lat: 29.356667, lon: -94.725000},
     { id: "8770822", name: "Texas Point, Sabine Pass", lat: 29.690000, lon: -93.841667 },
     { id: "8761305", name: "Shell Beach", lat: 29.868333, lon: -89.673333 },
     { id: "8735180", name: "Dauphin Island", lat: 30.250000, lon: -88.075000 },
