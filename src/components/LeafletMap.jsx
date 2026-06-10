@@ -104,6 +104,21 @@ const DAILY_DEFAULT_BOUNDS = L.latLngBounds(
   [33.2, -77]
 );
 
+const MESH_DEFAULT_VIEWS = {
+    ga_2023_v01c: {
+      center: [31.5, -81.0],
+      zoom: 6
+    },
+    "wnat_53k_v1.0": {
+      center: [30.0, -81.0],
+      zoom: 5
+    },
+    ec95d: {
+      center: [35.0, -75.0],
+      zoom: 5
+    }
+  };
+
 function knotsToMph(knots) {
   const value = Number(knots);
   if (!Number.isFinite(value)) return null;
@@ -380,6 +395,7 @@ function getDisplayLayerConfig(layerConfig, hurricaneMeta) {
 }
 
 export default function LeafletMap({
+  selectedMesh,
   stations,
   stationsVisible,
   opacity,
@@ -403,6 +419,20 @@ export default function LeafletMap({
   const currentBasemapLabels = currentBasemap.labels;
 
   const mapRef = useRef(null);
+
+  const [mapReady, setMapReady] = useState(false);
+  const [showSpinner, setShowSpinner] = useState(false);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !selectedMesh) return;
+
+    const view = MESH_DEFAULT_VIEWS[selectedMesh];
+    if (!view) return;
+
+    mapRef.current.setView(view.center, view.zoom, {
+      animate: true
+    });
+  }, [mapReady, selectedMesh]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -443,9 +473,6 @@ export default function LeafletMap({
       null
     );
   }, [hurricaneMeta]);
-
-  const [mapReady, setMapReady] = useState(false);
-  const [showSpinner, setShowSpinner] = useState(false);
 
   const rasterVersion = useMemo(() => {
     if (!rasterUrl) return "0";
@@ -862,7 +889,7 @@ export default function LeafletMap({
         {bounds && (
           <MapEffects
             bounds={bounds}
-            shouldFitBounds={!hurricaneMeta?.hasOverlays}
+            shouldFitBounds={!hurricaneMeta?.hasOverlays && !selectedMesh}
           />
         )}
 
