@@ -5,7 +5,7 @@ import TopBar from "./components/TopBar.jsx";
 import LeafletMap from "./components/LeafletMap.jsx";
 import StationPanel from "./components/StationPanel.jsx";
 import {
-  stations,
+  STATIONS_BY_REGION,
   archiveYears,
   archiveStormsByYear,
   archiveAdvisoriesByStorm
@@ -767,6 +767,12 @@ export default function App() {
     runMeta
   ]);
 
+  const selectedMeshInfo =
+    availableMeshes.find((mesh) => mesh.key === selectedMesh) || null;
+
+  const activeStations =
+    STATIONS_BY_REGION[selectedMeshInfo?.region] ?? [];
+
   const analysisJsonUrl = useMemo(() => {
     if (!selectedStation || selectedStation?.isAdcircPoint) return null;
     return buildStationAnalysisUrl(runBaseUrl, selectedStation.id);
@@ -951,7 +957,7 @@ export default function App() {
 
           <div className="content-area" ref={contentRef}>
             <LeafletMap
-              stations={stations}
+              stations={activeStations}
               stationsVisible={stationsVisible}
               opacity={opacity}
               onStationSelect={setSelectedStation}
