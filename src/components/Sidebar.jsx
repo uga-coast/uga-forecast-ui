@@ -17,7 +17,7 @@ function formatRunLabel(run) {
 
 function formatMiniDate(mode, selectedDate) {
   if (!selectedDate) return "--";
-  if (mode === "hurricane") return selectedDate;
+  if (mode === "hurricane" || mode === "archive") return selectedDate;
   return selectedDate.replace("2026-", "");
 }
 
@@ -77,6 +77,9 @@ function MiniSidebar({
   selectedRun,
   stationsVisible,
   onStationsVisibleChange,
+  pointHydrographEnabled,
+  onPointHydrographEnabledChange,
+  pointHydrographAvailable,
   basemap,
   primaryLayer,
   onExpand,
@@ -113,12 +116,10 @@ function MiniSidebar({
         <div className={"mini-mode-badge " + mode}>{mode}</div>
       </div>
 
-      {mode !== "archive" ? (
-        <div className="mini-block">
-          <div className="mini-label">Region</div>
-          <div className="mini-value">{meshLabel}</div>
-        </div>
-      ) : null}
+      <div className="mini-block">
+      <div className="mini-label">Region</div>
+      <div className="mini-value">{meshLabel}</div>
+    </div>
 
       {mode === "hurricane" ? (
         <>
@@ -142,7 +143,9 @@ function MiniSidebar({
       ) : null}
 
       <div className="mini-block">
-        <div className="mini-label">{mode === "hurricane" ? "Advisory" : "Date"}</div>
+        <div className="mini-label">
+          {mode === "hurricane" || mode === "archive" ? "Advisory" : "Date"}
+        </div>
         <div className="mini-value">{formatMiniDate(mode, selectedDate)}</div>
       </div>
 
@@ -169,6 +172,20 @@ function MiniSidebar({
             onChange={(e) => onStationsVisibleChange(e.target.checked)}
           />
           <span>Stations</span>
+        </label>
+      </div>
+
+      <div className="mini-block">
+        <label className="mini-toggle">
+          <input
+            type="checkbox"
+            checked={pointHydrographEnabled}
+            disabled={!pointHydrographAvailable}
+            onChange={(e) =>
+              onPointHydrographEnabledChange(e.target.checked)
+            }
+          />
+          <span>Hydrograph</span>
         </label>
       </div>
     </aside>
@@ -230,6 +247,9 @@ export default function Sidebar(props) {
         selectedRun={selectedRun}
         stationsVisible={stationsVisible}
         onStationsVisibleChange={onStationsVisibleChange}
+        pointHydrographEnabled={pointHydrographEnabled}
+        onPointHydrographEnabledChange={onPointHydrographEnabledChange}
+        pointHydrographAvailable={pointHydrographAvailable}
         basemap={basemap}
         primaryLayer={primaryLayer}
         onExpand={onCollapseToggle}
@@ -237,7 +257,6 @@ export default function Sidebar(props) {
         availableMeshes={availableMeshes}
         selectedHurricaneStorm={selectedHurricaneStorm}
         availableHurricaneStorms={availableHurricaneStorms}
-        //showHurricaneCone={showHurricaneCone}
         showHurricaneTrackPoints={showHurricaneTrackPoints}
       />
     );
@@ -258,65 +277,94 @@ export default function Sidebar(props) {
       </div>
 
       {mode === "archive" ? (
-        <>
-          <SidebarSection title="Archive Selection">
-            <label htmlFor="archive-year">Year</label>
-            <select
-              id="archive-year"
-              value={selectedYear}
-              onChange={(e) => onYearChange(e.target.value)}
-            >
-              {archiveYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+      <>
+        <SidebarSection title="Region">
+          <label htmlFor="forecast-region">Region</label>
+          <select
+            id="forecast-region"
+            value={selectedMesh}
+            onChange={(e) => onMeshChange(e.target.value)}
+          >
+            {availableMeshes.map((mesh) => (
+              <option key={mesh.key} value={mesh.key}>
+                {mesh.label}
+              </option>
+            ))}
+          </select>
+        </SidebarSection>
 
-            <label htmlFor="archive-storm">Storm</label>
-            <select
-              id="archive-storm"
-              value={selectedStorm}
-              onChange={(e) => onStormChange(e.target.value)}
-            >
-              {availableStorms.map((storm) => (
-                <option key={storm} value={storm}>
-                  {storm}
-                </option>
-              ))}
-            </select>
+        <SidebarSection title="Archive Selection">
+          <label htmlFor="archive-year">Year</label>
+          <select
+            id="archive-year"
+            value={selectedYear}
+            onChange={(e) => onYearChange(e.target.value)}
+          >
+            {archiveYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
 
-            <label htmlFor="archive-advisory">Advisory / Run</label>
-            <select
-              id="archive-advisory"
-              value={selectedAdvisory}
-              onChange={(e) => onAdvisoryChange(e.target.value)}
-            >
-              {availableAdvisories.map((advisory) => (
-                <option key={advisory} value={advisory}>
-                  {advisory}
-                </option>
-              ))}
-            </select>
-          </SidebarSection>
+          <label htmlFor="archive-storm">Storm</label>
+          <select
+            id="archive-storm"
+            value={selectedStorm}
+            onChange={(e) => onStormChange(e.target.value)}
+          >
+            {availableStorms.map((storm) => (
+              <option key={storm.key} value={storm.key}>
+                {storm.label}
+              </option>
+            ))}
+          </select>
 
-          <SidebarSection title="Layer">
-            <select
-              id="primary-layer"
-              value={primaryLayer}
-              onChange={(e) => onPrimaryLayerChange(e.target.value)}
-            >
-              <option value="maxele">Maximum Water Level (ft NAVD88)</option>
-              {waveLayerAvailable ? (
-                <option value="swan_HS_max">Maximum Significant Wave Height (ft)</option>
-              ) : null}
-            </select>
+          <label htmlFor="archive-advisory">Advisory</label>
+          <select
+            id="archive-advisory"
+            value={selectedAdvisory}
+            onChange={(e) => onAdvisoryChange(e.target.value)}
+          >
+            {availableAdvisories.map((advisory) => (
+              <option key={advisory} value={advisory}>
+                {advisory}
+              </option>
+            ))}
+          </select>
+        </SidebarSection>
 
-            {!waveLayerAvailable ? (
-              <div className="field-help">Wave layer not available for this date/run.</div>
+        <SidebarSection title="Forecast Run">
+          <label>
+            Runs for {selectedAdvisory || "--"} ({availableRuns.length} available)
+          </label>
+          <RunPills
+            runs={availableRuns}
+            selectedRun={selectedRun}
+            onRunChange={onRunChange}
+            latestRun={latestRunOverall}
+            selectedDate={selectedDate}
+            latestDateOverall={latestDateOverall}
+          />
+        </SidebarSection>
+
+        <SidebarSection title="Layer">
+          <select
+            id="primary-layer"
+            value={primaryLayer}
+            onChange={(e) => onPrimaryLayerChange(e.target.value)}
+          >
+            <option value="maxele">Maximum Water Level (ft NAVD88)</option>
+            {waveLayerAvailable ? (
+              <option value="swan_HS_max">Maximum Significant Wave Height (ft)</option>
             ) : null}
-          </SidebarSection>
-        </>
+          </select>
+
+          {!waveLayerAvailable ? (
+            <div className="field-help">Wave layer not available for this date/run.</div>
+          ) : null}
+        </SidebarSection>
+      </>
       ) : mode === "hurricane" ? (
         <>
           <SidebarSection title="Region">
