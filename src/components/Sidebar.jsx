@@ -382,33 +382,58 @@ export default function Sidebar(props) {
             </select>
           </SidebarSection>
 
-          <SidebarSection title="Storm Forecast">
-            <label htmlFor="hurricane-storm">Storm</label>
-            <select
-              id="hurricane-storm"
-              value={selectedHurricaneStorm}
-              onChange={(e) => onHurricaneStormChange(e.target.value)}
-            >
-              {availableHurricaneStorms.map((storm) => (
-                <option key={storm.key} value={storm.key}>
-                  {storm.label}
-                </option>
-              ))}
-            </select>
+          {availableHurricaneStorms.length === 0 ? (
+            <SidebarSection title="Storm Forecast">
+              <div className="field-help">
+                No active hurricane forecasts available. Historical storms can be viewed in Archive mode.
+              </div>
+            </SidebarSection>
+          ) : (
+            <>
+              <SidebarSection title="Storm Forecast">
+                <label htmlFor="hurricane-storm">Storm</label>
+                <select
+                  id="hurricane-storm"
+                  value={selectedHurricaneStorm}
+                  onChange={(e) => onHurricaneStormChange(e.target.value)}
+                >
+                  {availableHurricaneStorms.map((storm) => (
+                    <option key={storm.key} value={storm.key}>
+                      {storm.label}
+                    </option>
+                  ))}
+                </select>
 
-            <label htmlFor="forecast-advisory">Advisory</label>
-            <select
-              id="forecast-advisory"
-              value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
-            >
-              {liveDates.map((date) => (
-                <option key={date} value={date}>
-                  {date}
-                </option>
-              ))}
-            </select>
-          </SidebarSection>
+                <label htmlFor="forecast-advisory">Advisory</label>
+                <select
+                  id="forecast-advisory"
+                  value={selectedDate}
+                  onChange={(e) => onDateChange(e.target.value)}
+                >
+                  {liveDates.map((date) => (
+                    <option key={date} value={date}>
+                      {date}
+                    </option>
+                  ))}
+                </select>
+              </SidebarSection>
+
+              <SidebarSection title="Forecast Run">
+                <label>
+                  Runs for {selectedDate || "--"} ({availableRuns.length} available)
+                </label>
+
+                <RunPills
+                  runs={availableRuns}
+                  selectedRun={selectedRun}
+                  onRunChange={onRunChange}
+                  latestRun={latestRunOverall}
+                  selectedDate={selectedDate}
+                  latestDateOverall={latestDateOverall}
+                />
+              </SidebarSection>
+            </>
+          )}
 
           <SidebarSection title="Forecast Run">
             <label>
