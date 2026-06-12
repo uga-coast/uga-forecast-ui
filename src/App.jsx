@@ -398,6 +398,7 @@ export default function App() {
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [showContact, setShowContact] = useState(false);
+  const [showNoHurricaneRuns, setShowNoHurricaneRuns] = useState(false);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("forecastDisclaimerAccepted");
@@ -458,6 +459,15 @@ export default function App() {
     () => getHurricaneStorms(manifest, selectedMesh),
     [manifest, selectedMesh]
   );
+
+  useEffect(() => {
+    if (mode !== MODES.HURRICANE) return;
+    if (manifestStatus !== "ready") return;
+
+    if (availableMeshes.length === 0 || availableHurricaneStorms.length === 0) {
+      setShowNoHurricaneRuns(true);
+    }
+  }, [mode, manifestStatus, availableMeshes, availableHurricaneStorms]);
 
   const availableArchiveYears = useMemo(
     () => getArchiveYears(manifest, selectedMesh),
@@ -881,6 +891,29 @@ export default function App() {
               onClick={handleDisclaimerContinue}
             >
               Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showNoHurricaneRuns && (
+        <div className="disclaimer-overlay">
+          <div className="disclaimer-modal">
+            <h2>No Active Hurricane Forecasts</h2>
+
+            <p>
+              There are currently no active hurricane forecast runs available.
+            </p>
+
+            <p>
+              Historical hurricane forecasts can be viewed using Archive mode.
+            </p>
+
+            <button
+              className="disclaimer-button"
+              onClick={() => setShowNoHurricaneRuns(false)}
+            >
+              Close
             </button>
           </div>
         </div>
