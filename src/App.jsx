@@ -4,12 +4,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
 import LeafletMap from "./components/LeafletMap.jsx";
 import StationPanel from "./components/StationPanel.jsx";
-import {
-  STATIONS_BY_REGION,
-  archiveYears,
-  archiveStormsByYear,
-  archiveAdvisoriesByStorm
-} from "./data/mockData.js";
+import { STATIONS_BY_REGION } from "./data/stations.js";
 import { LAYER_CONFIGS } from "./config/layers.js";
 
 const S3_BASE_URL = "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com";
@@ -81,9 +76,11 @@ function splitDateParts(dateStr) {
   return { year, month, day };
 }
 
-function getModeMeshes(manifest, mode) {
-  if (mode === MODES.ARCHIVE) return [];
+function isStormMode(mode) {
+  return mode === MODES.HURRICANE || mode === MODES.ARCHIVE;
+}
 
+function getModeMeshes(manifest, mode) {
   const section = manifest?.[mode];
   const meshes = section?.meshes || {};
 
@@ -102,11 +99,6 @@ function getDefaultMeshKey(manifest, mode) {
   return preferred?.key || meshes[0]?.key || "";
 }
 
-function getSelectedMeshData(manifest, mode, selectedMesh) {
-  if (mode === MODES.ARCHIVE) return null;
-  return manifest?.[mode]?.meshes?.[selectedMesh] || null;
-}
-
 function getHurricaneStorms(manifest, selectedMesh) {
   const storms = manifest?.hurricane?.meshes?.[selectedMesh]?.storms || {};
   return Object.entries(storms).map(([key, value]) => ({
@@ -115,10 +107,33 @@ function getHurricaneStorms(manifest, selectedMesh) {
   }));
 }
 
-function getHurricaneAdvisories(manifest, selectedMesh, stormKey) {
+function getArchiveYears(manifest, selectedMesh) {
+  const storms = manifest?.archive?.meshes?.[selectedMesh]?.storms || {};
+  const years = new Set();
+
+  Object.values(storms).forEach((storm) => {
+    if (storm?.storm_year) years.add(String(storm.storm_year));
+  });
+
+  return Array.from(years).sort().reverse();
+}
+
+function getArchiveStorms(manifest, selectedMesh, selectedYear) {
+  const storms = manifest?.archive?.meshes?.[selectedMesh]?.storms || {};
+
+  return Object.entries(storms)
+    .filter(([, value]) => String(value?.storm_year) === String(selectedYear))
+    .map(([key, value]) => ({
+      key,
+      label: value?.label || key
+    }));
+}
+
+function getStormAdvisories(manifest, mode, selectedMesh, stormKey) {
   if (!stormKey || !selectedMesh) return [];
+
   const advisories =
-    manifest?.hurricane?.meshes?.[selectedMesh]?.storms?.[stormKey]?.advisories || {};
+    manifest?.[mode]?.meshes?.[selectedMesh]?.storms?.[stormKey]?.advisories || {};
 
   return Object.keys(advisories).sort((a, b) => {
     const aNum = parseInt(String(a).replace(/\D+/g, ""), 10) || 0;
@@ -127,10 +142,12 @@ function getHurricaneAdvisories(manifest, selectedMesh, stormKey) {
   });
 }
 
-function getHurricaneRunsByAdvisory(manifest, selectedMesh, stormKey) {
+function getStormRunsByAdvisory(manifest, mode, selectedMesh, stormKey) {
   if (!stormKey || !selectedMesh) return {};
+
   const advisories =
-    manifest?.hurricane?.meshes?.[selectedMesh]?.storms?.[stormKey]?.advisories || {};
+    manifest?.[mode]?.meshes?.[selectedMesh]?.storms?.[stormKey]?.advisories || {};
+
   const result = {};
 
   for (const [advisoryKey, runsObj] of Object.entries(advisories)) {
@@ -141,8 +158,8 @@ function getHurricaneRunsByAdvisory(manifest, selectedMesh, stormKey) {
 }
 
 function getModeDates(manifest, mode, selectedMesh, stormKey = "") {
-  if (mode === MODES.HURRICANE) {
-    return getHurricaneAdvisories(manifest, selectedMesh, stormKey);
+  if (isStormMode(mode)) {
+    return getStormAdvisories(manifest, mode, selectedMesh, stormKey);
   }
 
   const meshData = manifest?.daily?.meshes?.[selectedMesh];
@@ -150,8 +167,8 @@ function getModeDates(manifest, mode, selectedMesh, stormKey = "") {
 }
 
 function getModeRunsByDate(manifest, mode, selectedMesh, stormKey = "") {
-  if (mode === MODES.HURRICANE) {
-    return getHurricaneRunsByAdvisory(manifest, selectedMesh, stormKey);
+  if (isStormMode(mode)) {
+    return getStormRunsByAdvisory(manifest, mode, selectedMesh, stormKey);
   }
 
   const meshData = manifest?.daily?.meshes?.[selectedMesh];
@@ -165,14 +182,17 @@ function getModeRunsByDate(manifest, mode, selectedMesh, stormKey = "") {
   return result;
 }
 
-function getAvailableLayers(manifest, mode, selectedMesh, selectedDate, selectedRun, selectedStorm = "") {
-  if (mode === MODES.ARCHIVE) {
-    return ["maxele"];
-  }
-
-  if (mode === MODES.HURRICANE) {
+function getAvailableLayers(
+  manifest,
+  mode,
+  selectedMesh,
+  selectedDate,
+  selectedRun,
+  selectedStorm = ""
+) {
+  if (isStormMode(mode)) {
     const runMeta =
-      manifest?.hurricane?.meshes?.[selectedMesh]?.storms?.[selectedStorm]?.advisories?.[selectedDate]?.[selectedRun];
+      manifest?.[mode]?.meshes?.[selectedMesh]?.storms?.[selectedStorm]?.advisories?.[selectedDate]?.[selectedRun];
     const runLayers = runMeta?.layers;
     return Array.isArray(runLayers) && runLayers.length ? runLayers : ["maxele"];
   }
@@ -191,8 +211,8 @@ function buildModeS3Url(
   primaryLayer,
   selectedStorm = ""
 ) {
-  if (mode === MODES.HURRICANE) {
-    const section = manifest?.hurricane?.meshes?.[selectedMesh];
+  if (isStormMode(mode)) {
+    const section = manifest?.[mode]?.meshes?.[selectedMesh];
     const stormMeta = section?.storms?.[selectedStorm];
 
     if (!selectedMesh || !section?.meteorology || !section?.model) return null;
@@ -205,7 +225,7 @@ function buildModeS3Url(
 
     return [
       S3_BASE_URL,
-      "hurricane",
+      mode,
       stormYear,
       stormName,
       selectedStorm,
@@ -263,14 +283,15 @@ function buildDailyForecastJsonUrl(manifest, selectedMesh, selectedDate, selecte
   ].join("/");
 }
 
-function buildHurricaneForecastJsonUrl(
+function buildStormForecastJsonUrl(
   manifest,
+  mode,
   selectedMesh,
   selectedStorm,
   selectedDate,
   selectedRun
 ) {
-  const section = manifest?.hurricane?.meshes?.[selectedMesh];
+  const section = manifest?.[mode]?.meshes?.[selectedMesh];
   const stormMeta = section?.storms?.[selectedStorm];
 
   if (!selectedMesh || !section?.meteorology || !section?.model) return null;
@@ -282,7 +303,7 @@ function buildHurricaneForecastJsonUrl(
 
   return [
     S3_BASE_URL,
-    "hurricane",
+    mode,
     stormYear,
     stormName,
     selectedStorm,
@@ -347,6 +368,8 @@ export default function App() {
 
   const [selectedMesh, setSelectedMesh] = useState("");
   const [selectedHurricaneStorm, setSelectedHurricaneStorm] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedArchiveStorm, setSelectedArchiveStorm] = useState("");
 
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedRun, setSelectedRun] = useState("");
@@ -372,15 +395,8 @@ export default function App() {
   const [pinCopyStatus, setPinCopyStatus] = useState("");
   const contentRef = useRef(null);
 
-  const [selectedYear, setSelectedYear] = useState(archiveYears[0]);
-  const [selectedStorm, setSelectedStorm] = useState(archiveStormsByYear[archiveYears[0]][0]);
-  const [selectedAdvisory, setSelectedAdvisory] = useState(
-    archiveAdvisoriesByStorm[archiveStormsByYear[archiveYears[0]][0]][0]
-  );
-
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
-
   const [showContact, setShowContact] = useState(false);
 
   useEffect(() => {
@@ -418,7 +434,6 @@ export default function App() {
   const availableMeshes = useMemo(() => getModeMeshes(manifest, mode), [manifest, mode]);
 
   useEffect(() => {
-    if (mode === MODES.ARCHIVE) return;
     if (!availableMeshes.length) return;
 
     const validKeys = availableMeshes.map((mesh) => mesh.key);
@@ -431,12 +446,27 @@ export default function App() {
       if (mode === MODES.HURRICANE) {
         setSelectedHurricaneStorm("");
       }
+
+      if (mode === MODES.ARCHIVE) {
+        setSelectedYear("");
+        setSelectedArchiveStorm("");
+      }
     }
   }, [manifest, mode, availableMeshes, selectedMesh]);
 
   const availableHurricaneStorms = useMemo(
     () => getHurricaneStorms(manifest, selectedMesh),
     [manifest, selectedMesh]
+  );
+
+  const availableArchiveYears = useMemo(
+    () => getArchiveYears(manifest, selectedMesh),
+    [manifest, selectedMesh]
+  );
+
+  const availableArchiveStorms = useMemo(
+    () => getArchiveStorms(manifest, selectedMesh, selectedYear),
+    [manifest, selectedMesh, selectedYear]
   );
 
   useEffect(() => {
@@ -449,20 +479,46 @@ export default function App() {
     }
   }, [mode, availableHurricaneStorms, selectedHurricaneStorm]);
 
+  useEffect(() => {
+    if (mode !== MODES.ARCHIVE) return;
+    if (!availableArchiveYears.length) return;
+
+    if (!availableArchiveYears.includes(selectedYear)) {
+      setSelectedYear(availableArchiveYears[0]);
+      setSelectedArchiveStorm("");
+      setSelectedDate("");
+      setSelectedRun("");
+    }
+  }, [mode, availableArchiveYears, selectedYear]);
+
+  useEffect(() => {
+    if (mode !== MODES.ARCHIVE) return;
+    if (!availableArchiveStorms.length) return;
+
+    const validKeys = availableArchiveStorms.map((storm) => storm.key);
+
+    if (!validKeys.includes(selectedArchiveStorm)) {
+      setSelectedArchiveStorm(validKeys[0]);
+      setSelectedDate("");
+      setSelectedRun("");
+    }
+  }, [mode, availableArchiveStorms, selectedArchiveStorm]);
+
+  const activeStormKey =
+    mode === MODES.ARCHIVE ? selectedArchiveStorm : selectedHurricaneStorm;
+
   const liveDates = useMemo(() => {
-    if (mode === MODES.ARCHIVE) return [];
-    return getModeDates(manifest, mode, selectedMesh, selectedHurricaneStorm);
-  }, [manifest, mode, selectedMesh, selectedHurricaneStorm]);
+    return getModeDates(manifest, mode, selectedMesh, activeStormKey);
+  }, [manifest, mode, selectedMesh, activeStormKey]);
 
   const runsByDate = useMemo(() => {
-    if (mode === MODES.ARCHIVE) return {};
-    return getModeRunsByDate(manifest, mode, selectedMesh, selectedHurricaneStorm);
-  }, [manifest, mode, selectedMesh, selectedHurricaneStorm]);
+    return getModeRunsByDate(manifest, mode, selectedMesh, activeStormKey);
+  }, [manifest, mode, selectedMesh, activeStormKey]);
 
   const latestDateOverall = liveDates.length ? liveDates[0] : "";
   const latestRunsOverall = latestDateOverall ? sortRuns(runsByDate[latestDateOverall] || []) : [];
   const latestRunOverall =
-    mode === MODES.HURRICANE
+    isStormMode(mode)
       ? (
           latestRunsOverall.find((run) => String(run).toLowerCase() === "ofcl") ||
           (latestRunsOverall.length ? latestRunsOverall[latestRunsOverall.length - 1] : "")
@@ -474,15 +530,9 @@ export default function App() {
     [runsByDate, selectedDate]
   );
 
-  const availableStorms = useMemo(() => archiveStormsByYear[selectedYear] || [], [selectedYear]);
-  const availableAdvisories = useMemo(
-    () => archiveAdvisoriesByStorm[selectedStorm] || [],
-    [selectedStorm]
-  );
-
   const availableLayers = useMemo(
-    () => getAvailableLayers(manifest, mode, selectedMesh, selectedDate, selectedRun, selectedHurricaneStorm),
-    [manifest, mode, selectedMesh, selectedDate, selectedRun, selectedHurricaneStorm]
+    () => getAvailableLayers(manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey),
+    [manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey]
   );
 
   const chosenLayer = availableLayers.includes(primaryLayer) ? primaryLayer : "maxele";
@@ -490,9 +540,9 @@ export default function App() {
 
   useEffect(() => {
     if (manifestStatus !== "ready") return;
-    if (mode === MODES.ARCHIVE) return;
     if (!selectedMesh) return;
     if (mode === MODES.HURRICANE && !selectedHurricaneStorm) return;
+    if (mode === MODES.ARCHIVE && !selectedArchiveStorm) return;
     if (!liveDates.length) return;
 
     const nextDate =
@@ -509,11 +559,9 @@ export default function App() {
     }
 
     const nextRun =
-      selectedRun && runs.includes(selectedRun)
-        ? selectedRun
-        : mode === MODES.HURRICANE
-          ? runs.find((run) => String(run).toLowerCase() === "ofcl") || runs[runs.length - 1]
-          : runs[runs.length - 1];
+      isStormMode(mode)
+        ? runs.find((run) => String(run).toLowerCase() === "ofcl") || runs[runs.length - 1]
+        : runs[runs.length - 1];
 
     if (selectedDate !== nextDate) {
       setSelectedDate(nextDate);
@@ -527,12 +575,12 @@ export default function App() {
     mode,
     selectedMesh,
     selectedHurricaneStorm,
+    selectedArchiveStorm,
     liveDates,
     runsByDate,
     selectedDate,
     selectedRun
   ]);
-
 
   useEffect(() => {
     if (!availableLayers.includes(primaryLayer)) {
@@ -541,10 +589,6 @@ export default function App() {
   }, [availableLayers, primaryLayer]);
 
   const rasterUrl = useMemo(() => {
-    if (mode === MODES.ARCHIVE) {
-      return null;
-    }
-
     return buildModeS3Url(
       manifest,
       mode,
@@ -552,35 +596,33 @@ export default function App() {
       selectedDate,
       selectedRun,
       chosenLayer,
-      selectedHurricaneStorm
+      activeStormKey
     );
-  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, chosenLayer, selectedHurricaneStorm]);
+  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, chosenLayer, activeStormKey]);
 
   const runMeta = useMemo(() => {
     if (mode === MODES.DAILY) {
       return manifest?.daily?.meshes?.[selectedMesh]?.dates?.[selectedDate]?.[selectedRun] || null;
     }
 
-    if (mode === MODES.HURRICANE) {
+    if (isStormMode(mode)) {
       return (
-        manifest?.hurricane?.meshes?.[selectedMesh]?.storms?.[selectedHurricaneStorm]?.advisories?.[selectedDate]?.[selectedRun] ||
+        manifest?.[mode]?.meshes?.[selectedMesh]?.storms?.[activeStormKey]?.advisories?.[selectedDate]?.[selectedRun] ||
         null
       );
     }
 
     return null;
-  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, selectedHurricaneStorm]);
+  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey]);
 
-  const hurricaneMeta = mode === MODES.HURRICANE ? runMeta?.hurricane || null : null;
+  const hurricaneMeta = isStormMode(mode) ? runMeta?.hurricane || null : null;
 
   const runBaseUrl = useMemo(() => {
     if (!rasterUrl) return null;
     return rasterUrl.substring(0, rasterUrl.lastIndexOf("/"));
   }, [rasterUrl]);
 
-  const pointHydrographAvailable =
-    mode !== MODES.ARCHIVE &&
-    Boolean(runBaseUrl);
+  const pointHydrographAvailable = Boolean(runBaseUrl);
 
   useEffect(() => {
     if (!pointHydrographAvailable && pointHydrographEnabled) {
@@ -605,17 +647,24 @@ export default function App() {
     availableHurricaneStorms.find((storm) => storm.key === selectedHurricaneStorm)?.label ||
     selectedHurricaneStorm;
 
+  const selectedArchiveStormLabel =
+    availableArchiveStorms.find((storm) => storm.key === selectedArchiveStorm)?.label ||
+    selectedArchiveStorm;
+
+  const activeStormLabel =
+    mode === MODES.ARCHIVE ? selectedArchiveStormLabel : selectedHurricaneStormLabel;
+
   const hurricaneBannerText = useMemo(() => {
     if (!hurricaneMeta || !advisoryTime) return null;
 
     const issued = formatAdvisoryIssuedTime(advisoryTime);
-    const stormName = selectedHurricaneStormLabel || "Storm";
+    const stormName = activeStormLabel || "Storm";
     const advisoryText = advisory ? `Advisory ${advisory}` : null;
 
     return [stormName, advisoryText, `Issued: ${issued}`]
       .filter(Boolean)
       .join(" • ");
-  }, [hurricaneMeta, advisoryTime, advisory, selectedHurricaneStormLabel]);
+  }, [hurricaneMeta, advisoryTime, advisory, activeStormLabel]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -667,7 +716,7 @@ export default function App() {
     const fallbackDate = liveDates.includes(date) ? date : liveDates[0];
     const nextRuns = sortRuns(runsByDate[fallbackDate] || []);
     const nextRun =
-      mode === MODES.HURRICANE
+      isStormMode(mode)
         ? (
             nextRuns.find((run) => String(run).toLowerCase() === "ofcl") ||
             (nextRuns.length ? nextRuns[nextRuns.length - 1] : "")
@@ -679,30 +728,23 @@ export default function App() {
     resetInteractiveState();
   }
 
-  function handleYearChange(year) {
-    const storms = archiveStormsByYear[year] || [];
-    const nextStorm = storms[0] || "";
-    const advisories = archiveAdvisoriesByStorm[nextStorm] || [];
-    const nextAdvisory = advisories[0] || "";
-
+  function handleArchiveYearChange(year) {
     setSelectedYear(year);
-    setSelectedStorm(nextStorm);
-    setSelectedAdvisory(nextAdvisory);
-    setSelectedStation(null);
+    setSelectedArchiveStorm("");
+    setSelectedDate("");
+    setSelectedRun("");
+    resetInteractiveState();
   }
 
-  function handleStormChange(storm) {
-    const advisories = archiveAdvisoriesByStorm[storm] || [];
-    const nextAdvisory = advisories[0] || "";
-
-    setSelectedStorm(storm);
-    setSelectedAdvisory(nextAdvisory);
-    setSelectedStation(null);
+  function handleArchiveStormChange(stormKey) {
+    setSelectedArchiveStorm(stormKey);
+    setSelectedDate("");
+    setSelectedRun("");
+    resetInteractiveState();
   }
 
   function handleModeChange(nextMode) {
-    const nextMesh =
-      nextMode === MODES.ARCHIVE ? "" : getDefaultMeshKey(manifest, nextMode);
+    const nextMesh = getDefaultMeshKey(manifest, nextMode);
 
     setMode(nextMode);
     setSelectedMesh(nextMesh);
@@ -710,19 +752,21 @@ export default function App() {
     setSelectedDate("");
     setSelectedRun("");
     setSelectedHurricaneStorm("");
+    setSelectedArchiveStorm("");
+    setSelectedYear("");
   }
 
   const statusText = useMemo(() => {
+    const isLatest = selectedDate === latestDateOverall && selectedRun === latestRunOverall;
+
     if (mode === MODES.ARCHIVE) {
-      return `Archive | ${selectedYear} | ${selectedStorm} | ${selectedAdvisory}`;
+      return `Archive | ${selectedMeshLabel || "--"} | ${selectedYear || "--"} | ${selectedArchiveStormLabel || "--"} | ${selectedDate || "--"} | ${selectedRun || "--"}${isLatest ? " (Latest)" : ""}`;
     }
 
     if (mode === MODES.HURRICANE) {
-      const isLatest = selectedDate === latestDateOverall && selectedRun === latestRunOverall;
       return `Hurricane | ${selectedMeshLabel || "--"} | ${selectedHurricaneStormLabel || "--"} | ${selectedDate} | ${selectedRun}${isLatest ? " (Latest)" : ""}`;
     }
 
-    const isLatest = selectedDate === latestDateOverall && selectedRun === latestRunOverall;
     return `Daily | ${selectedMeshLabel || "--"} | ${selectedDate} | ${selectedRun}${isLatest ? " (Latest)" : ""}`;
   }, [
     mode,
@@ -732,8 +776,7 @@ export default function App() {
     latestDateOverall,
     latestRunOverall,
     selectedYear,
-    selectedStorm,
-    selectedAdvisory,
+    selectedArchiveStormLabel,
     selectedHurricaneStormLabel
   ]);
 
@@ -746,11 +789,12 @@ export default function App() {
       return buildDailyForecastJsonUrl(manifest, selectedMesh, selectedDate, selectedRun);
     }
 
-    if (mode === MODES.HURRICANE) {
-      return buildHurricaneForecastJsonUrl(
+    if (isStormMode(mode)) {
+      return buildStormForecastJsonUrl(
         manifest,
+        mode,
         selectedMesh,
-        selectedHurricaneStorm,
+        activeStormKey,
         selectedDate,
         selectedRun
       );
@@ -763,7 +807,7 @@ export default function App() {
     selectedMesh,
     selectedDate,
     selectedRun,
-    selectedHurricaneStorm,
+    activeStormKey,
     runMeta
   ]);
 
@@ -781,6 +825,8 @@ export default function App() {
   console.log({
     mode,
     selectedMesh,
+    selectedYear,
+    selectedArchiveStorm,
     selectedDate,
     selectedRun,
     rasterUrl,
@@ -790,82 +836,85 @@ export default function App() {
 
   return (
     <div className="app-page">
-    {showDisclaimer && (
-      <div className="disclaimer-overlay">
-        <div className="disclaimer-modal">
-          <h2>Experimental Research Product</h2>
+      {showDisclaimer && (
+        <div className="disclaimer-overlay">
+          <div className="disclaimer-modal">
+            <h2>Experimental Research Product</h2>
 
-          <p>
-            This website provides experimental flood forecast information,
-            model results, and related data products for research,
-            evaluation, and demonstration purposes only.
-          </p>
+            <p>
+              This website provides experimental flood forecast information,
+              model results, and related data products for research,
+              evaluation, and demonstration purposes only.
+            </p>
 
-          <p>
-            The information presented is under active development and may
-            contain errors, omissions, inaccuracies, or interruptions in
-            service.
-          </p>
+            <p>
+              The information presented is under active development and may
+              contain errors, omissions, inaccuracies, or interruptions in
+              service.
+            </p>
 
-          <p>
-            This website is not an operational forecasting system
-            and should not be used for emergency management,
-            public safety, evacuation planning, navigation, regulatory
-            compliance, or any other decision-making purposes.
-          </p>
+            <p>
+              This website is not an operational forecasting system
+              and should not be used for emergency management,
+              public safety, evacuation planning, navigation, regulatory
+              compliance, or any other decision-making purposes.
+            </p>
 
-          <p>
-            Users should rely on official sources, including the National
-            Weather Service, local emergency management agencies, and other
-            authorized organizations for forecasts, warnings, and safety
-            information.
-          </p>
+            <p>
+              Users should rely on official sources, including the National
+              Weather Service, local emergency management agencies, and other
+              authorized organizations for forecasts, warnings, and safety
+              information.
+            </p>
 
-          <label className="disclaimer-checkbox">
-            <input
-              type="checkbox"
-              checked={dontShowAgain}
-              onChange={(e) => setDontShowAgain(e.target.checked)}
-            />
-            Don't show this message again on this device
-          </label>
+            <label className="disclaimer-checkbox">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+              />
+              Don't show this message again on this device
+            </label>
 
-          <button
-            className="disclaimer-button"
-            onClick={handleDisclaimerContinue}
-          >
-            Continue
-          </button>
+            <button
+              className="disclaimer-button"
+              onClick={handleDisclaimerContinue}
+            >
+              Continue
+            </button>
+          </div>
         </div>
-      </div>
-    )}
-    {showContact && (
-      <div className="disclaimer-overlay">
-        <div className="disclaimer-modal contact-modal">
-          <h2>Contact</h2>
-          <p>
-            Questions, feedback, bug reports, or collaboration inquiries:
-          </p>
-          <p>
-            <strong>Matthew V. Bilskie</strong><br />
-            University of Georgia<br />
-            College of Engineering
-          </p>
-          <p>
-            <a href="mailto:mbilskie@uga.edu">
-              mbilskie@uga.edu
-            </a>
-          </p>
-          <button
-            className="disclaimer-button"
-            onClick={() => setShowContact(false)}
-          >
-            Close
-          </button>
+      )}
+
+      {showContact && (
+        <div className="disclaimer-overlay">
+          <div className="disclaimer-modal contact-modal">
+            <h2>Contact</h2>
+            <p>
+              Questions, feedback, bug reports, or collaboration inquiries:
+            </p>
+            <p>
+              <strong>Matthew V. Bilskie</strong><br />
+              University of Georgia<br />
+              College of Engineering
+            </p>
+            <p>
+              <a href="mailto:mbilskie@uga.edu">
+                mbilskie@uga.edu
+              </a>
+            </p>
+            <button
+              className="disclaimer-button"
+              onClick={() => setShowContact(false)}
+            >
+              Close
+            </button>
+          </div>
         </div>
-      </div>
-    )}
+      )}
+
       <Header />
+
       <div className="app-shell">
         <Sidebar
           collapsed={sidebarCollapsed}
@@ -904,15 +953,15 @@ export default function App() {
           onShowHurricaneConeChange={setShowHurricaneCone}
           showHurricaneTrackPoints={showHurricaneTrackPoints}
           onShowHurricaneTrackPointsChange={setShowHurricaneTrackPoints}
-          archiveYears={archiveYears}
+          archiveYears={availableArchiveYears}
           selectedYear={selectedYear}
-          onYearChange={handleYearChange}
-          availableStorms={availableStorms}
-          selectedStorm={selectedStorm}
-          onStormChange={handleStormChange}
-          availableAdvisories={availableAdvisories}
-          selectedAdvisory={selectedAdvisory}
-          onAdvisoryChange={setSelectedAdvisory}
+          onYearChange={handleArchiveYearChange}
+          availableStorms={availableArchiveStorms}
+          selectedStorm={selectedArchiveStorm}
+          onStormChange={handleArchiveStormChange}
+          availableAdvisories={liveDates}
+          selectedAdvisory={selectedDate}
+          onAdvisoryChange={handleDateChange}
           availableHurricaneStorms={availableHurricaneStorms}
           selectedHurricaneStorm={selectedHurricaneStorm}
           onHurricaneStormChange={(stormKey) => {
@@ -930,6 +979,11 @@ export default function App() {
 
             if (mode === MODES.HURRICANE) {
               setSelectedHurricaneStorm("");
+            }
+
+            if (mode === MODES.ARCHIVE) {
+              setSelectedYear("");
+              setSelectedArchiveStorm("");
             }
 
             resetInteractiveState();
@@ -952,7 +1006,10 @@ export default function App() {
           )}
 
           {mode === MODES.ARCHIVE && (
-            <div className="banner banner-archive">Archived Forecast — Not Current Conditions</div>
+            <div className="banner banner-archive">
+              Archived Forecast — Not Current Conditions
+              {hurricaneBannerText ? ` • ${hurricaneBannerText}` : ""}
+            </div>
           )}
 
           <div className="content-area" ref={contentRef}>
@@ -1032,6 +1089,7 @@ export default function App() {
           </div>
         </div>
       </div>
+
       {!selectedStation && (
         <div className="floating-button-stack">
           <button

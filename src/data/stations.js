@@ -32,12 +32,3 @@ export const STATIONS_BY_REGION = {
     // Add East Coast stations here
   ]
 };
-
-export const archiveYears = ["2025", "2024", "2023"];
-export const archiveStormsByYear = { "2025": ["Alpha"], "2024": ["Helene", "Debby"], "2023": ["Idalia"] };
-export const archiveAdvisoriesByStorm = {
-  "Alpha": ["Advisory 01", "Advisory 02"],
-  "Helene": ["Advisory 10", "Advisory 11", "Advisory 12"],
-  "Debby": ["Advisory 03", "Advisory 04"],
-  "Idalia": ["Advisory 08", "Advisory 09"]
-};
