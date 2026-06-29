@@ -852,9 +852,10 @@ export default function App() {
             <h2>Experimental Research Product</h2>
 
             <p>
-              This website provides experimental flood forecast information,
+              This website provides experimental coastal flood forecast information,
               model results, and related data products for research,
-              evaluation, and demonstration purposes only.
+              evaluation, and demonstration purposes only. The website does not contain
+              information related to rainfall-driven floods at this time.
             </p>
 
             <p>
