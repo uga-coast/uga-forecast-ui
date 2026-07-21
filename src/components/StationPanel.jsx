@@ -34,21 +34,21 @@ function formatNoaaApiDate(date) {
   return `${y}${m}${d} ${h}:${min}`;
 }
 
-function buildNoaaWindow(cycleTimestamp, runMeta, hoursBack = 48, hoursForward = 48) {
+function buildNoaaWindow(
+  cycleTimestamp,
+  hoursBack = 48,
+  hoursForward = 48
+) {
   const cycleDate = parseUtcDate(cycleTimestamp);
   if (!cycleDate) return null;
 
-  const begin = new Date(cycleDate.getTime() - hoursBack * 60 * 60 * 1000);
+  const begin = new Date(
+    cycleDate.getTime() - hoursBack * 60 * 60 * 1000
+  );
 
-  let end;
-  const isHistoricalHurricane =
-    runMeta?.forecastType === "hurricane";
-
-  if (isHistoricalHurricane) {
-    end = new Date(cycleDate.getTime() + hoursForward * 60 * 60 * 1000);
-  } else {
-    end = new Date();
-  }
+  const end = new Date(
+    cycleDate.getTime() + hoursForward * 60 * 60 * 1000
+  );
 
   return {
     beginDate: formatNoaaApiDate(begin),
@@ -307,7 +307,7 @@ export default function StationPanel({
       setNoaaStatus("loading");
       setNoaaData([]);
 
-      const window = buildNoaaWindow(forecastCycleTime, runMeta, 48, 48);
+      const window = buildNoaaWindow(forecastCycleTime, 48, 48);
       if (!window) {
         setNoaaStatus("error");
         return;
