@@ -361,7 +361,8 @@ function formatAdvisoryIssuedTime(value) {
 }
 
 export default function App() {
-  const [mode, setMode] = useState(MODES.DAILY);
+  // set the default mode to daily for now, but this could be changed to hurricane or archive if desired
+  const [mode, setMode] = useState(MODES.HURRICANE);
   const [manifest, setManifest] = useState(null);
   const [manifestStatus, setManifestStatus] = useState("loading");
   const [primaryLayer, setPrimaryLayer] = useState("maxele");
