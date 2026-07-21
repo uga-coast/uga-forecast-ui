@@ -461,14 +461,24 @@ export default function App() {
     [manifest, selectedMesh]
   );
 
+  // Wait for the hurricane mesh to initialize before checking for active forecasts.
   useEffect(() => {
     if (mode !== MODES.HURRICANE) return;
     if (manifestStatus !== "ready") return;
+    if (!selectedMesh) return;
 
-    if (availableMeshes.length === 0 || availableHurricaneStorms.length === 0) {
-      setShowNoHurricaneRuns(true);
-    }
-  }, [mode, manifestStatus, availableMeshes, availableHurricaneStorms]);
+    const noActiveRuns =
+      availableMeshes.length === 0 ||
+      availableHurricaneStorms.length === 0;
+
+    setShowNoHurricaneRuns(noActiveRuns);
+  }, [
+    mode,
+    manifestStatus,
+    selectedMesh,
+    availableMeshes,
+    availableHurricaneStorms
+  ]);
 
   const availableArchiveYears = useMemo(
     () => getArchiveYears(manifest, selectedMesh),
