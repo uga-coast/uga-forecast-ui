@@ -101,10 +101,19 @@ function getDefaultMeshKey(manifest, mode) {
 
 function getHurricaneStorms(manifest, selectedMesh) {
   const storms = manifest?.hurricane?.meshes?.[selectedMesh]?.storms || {};
-  return Object.entries(storms).map(([key, value]) => ({
-    key,
-    label: value?.label || key
-  }));
+
+  return Object.entries(storms)
+    .sort(([, a], [, b]) => {
+      const aLatest = Object.keys(a?.advisories || {}).sort().reverse()[0] || "";
+      const bLatest = Object.keys(b?.advisories || {}).sort().reverse()[0] || "";
+
+      // Newest advisory first
+      return bLatest.localeCompare(aLatest);
+    })
+    .map(([key, value]) => ({
+      key,
+      label: value?.label || key
+    }));
 }
 
 function getArchiveYears(manifest, selectedMesh) {
