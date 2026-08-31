@@ -15,10 +15,33 @@ function formatRunLabel(run) {
   return run;
 }
 
+function formatAdvisoryLabel(advisory) {
+  if (!advisory) return "--";
+
+  const number = String(advisory).match(/(\d+)$/)?.[1];
+  return number ? `Advisory ${Number(number)}` : advisory;
+}
+
 function formatMiniDate(mode, selectedDate) {
   if (!selectedDate) return "--";
-  if (mode === "hurricane" || mode === "archive") return selectedDate;
+  if (mode === "hurricane" || mode === "archive") {
+    return formatAdvisoryLabel(selectedDate);
+  }
   return selectedDate.replace("2026-", "");
+}
+
+function formatDailyDate(dateValue) {
+  if (!dateValue) return "--";
+
+  const date = new Date(`${dateValue}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+
+  return date.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
 function SidebarSection({ title, children }) {
@@ -61,12 +84,194 @@ function RunPills({
               (String(run).toLowerCase() === "ofcl" ? "run-pill-ofcl" : "")
             }
             onClick={() => onRunChange(run)}
+            aria-pressed={selectedRun === run}
           >
             <span>{formatRunLabel(run)}</span>
             {isLatest ? <span className="run-pill-tag">Latest</span> : null}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function ForecastNavigator({
+  values,
+  selectedValue,
+  selectedRun,
+  latestRun,
+  onChange,
+  itemLabel
+}) {
+  if (!values.length) return null;
+
+  const selectedIndex = values.indexOf(selectedValue);
+  const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
+  const olderValue = values[currentIndex + 1] || null;
+  const newerValue = currentIndex > 0 ? values[currentIndex - 1] : null;
+  const isLatest = selectedValue === values[0] && selectedRun === latestRun;
+  const navigatorSummary =
+    itemLabel === "Forecast date"
+      ? currentIndex === 0
+        ? "Latest available forecast"
+        : currentIndex === values.length - 1
+          ? "Oldest available forecast"
+          : `Viewing ${formatDailyDate(selectedValue)}`
+      : `${currentIndex + 1} of ${values.length}`;
+
+  function handleKeyDown(event) {
+    if (event.key === "ArrowLeft" && olderValue) {
+      event.preventDefault();
+      onChange(olderValue);
+    }
+
+    if (event.key === "ArrowRight" && newerValue) {
+      event.preventDefault();
+      onChange(newerValue);
+    }
+
+    if (event.key === "Home" && !isLatest) {
+      event.preventDefault();
+      onChange(values[0]);
+    }
+  }
+
+  return (
+    <div
+      className="forecast-navigator"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      aria-label={`${itemLabel} navigation. ${navigatorSummary}.`}
+    >
+      <div className="forecast-navigator-status">
+        <span>{itemLabel}</span>
+        <strong>{navigatorSummary}</strong>
+      </div>
+
+      <div className="forecast-navigator-actions">
+        <button
+          type="button"
+          onClick={() => olderValue && onChange(olderValue)}
+          disabled={!olderValue}
+        >
+          ← Older
+        </button>
+        <button
+          type="button"
+          className="forecast-latest-button"
+          onClick={() => onChange(values[0])}
+          disabled={isLatest}
+        >
+          Latest
+        </button>
+        <button
+          type="button"
+          onClick={() => newerValue && onChange(newerValue)}
+          disabled={!newerValue}
+        >
+          Newer →
+        </button>
+      </div>
+
+      <div className="forecast-navigator-help">
+        Focus here and use ←/→; Home returns to latest.
+      </div>
+    </div>
+  );
+}
+
+function DailyForecastNavigator({
+  dates,
+  runsByDate,
+  selectedDate,
+  selectedRun,
+  onDateChange,
+  onRunChange
+}) {
+  const cycles = dates.flatMap((date) =>
+    [...(runsByDate?.[date] || [])]
+      .reverse()
+      .map((run) => ({ date, run, key: `${date}|${run}` }))
+  );
+
+  if (!cycles.length) return null;
+
+  const selectedKey = `${selectedDate}|${selectedRun}`;
+  const selectedIndex = cycles.findIndex((cycle) => cycle.key === selectedKey);
+  const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
+  const olderCycle = cycles[currentIndex + 1] || null;
+  const newerCycle = currentIndex > 0 ? cycles[currentIndex - 1] : null;
+  const isLatest = currentIndex === 0 && selectedIndex === 0;
+  const navigatorSummary =
+    currentIndex === 0
+      ? "Latest available forecast"
+      : currentIndex === cycles.length - 1
+        ? "Oldest available forecast"
+        : `Viewing ${formatDailyDate(cycles[currentIndex].date)} • ${formatRunLabel(cycles[currentIndex].run)}`;
+
+  function selectCycle(cycle) {
+    if (!cycle) return;
+    onDateChange(cycle.date);
+    onRunChange(cycle.run);
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "ArrowLeft" && olderCycle) {
+      event.preventDefault();
+      selectCycle(olderCycle);
+    }
+
+    if (event.key === "ArrowRight" && newerCycle) {
+      event.preventDefault();
+      selectCycle(newerCycle);
+    }
+
+    if (event.key === "Home" && !isLatest) {
+      event.preventDefault();
+      selectCycle(cycles[0]);
+    }
+  }
+
+  return (
+    <div
+      className="forecast-navigator"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      aria-label={`Forecast cycle navigation. ${navigatorSummary}.`}
+    >
+      <div className="forecast-navigator-status">
+        <span>Forecast cycle</span>
+        <strong>{navigatorSummary}</strong>
+      </div>
+
+      <div className="forecast-navigator-actions">
+        <button
+          type="button"
+          onClick={() => selectCycle(olderCycle)}
+          disabled={!olderCycle}
+        >
+          ← Older
+        </button>
+        <button
+          type="button"
+          className="forecast-latest-button"
+          onClick={() => selectCycle(cycles[0])}
+          disabled={isLatest}
+        >
+          Latest
+        </button>
+        <button
+          type="button"
+          onClick={() => selectCycle(newerCycle)}
+          disabled={!newerCycle}
+        >
+          Newer →
+        </button>
+      </div>
+
+      <div className="forecast-navigator-help">
+        Focus here and use ←/→; Home returns to latest.
+      </div>
     </div>
   );
 }
@@ -87,7 +292,6 @@ function MiniSidebar({
   availableMeshes,
   selectedHurricaneStorm,
   availableHurricaneStorms,
-  //showHurricaneCone,
   showHurricaneTrackPoints
 }) {
   const meshLabel =
@@ -101,70 +305,64 @@ function MiniSidebar({
     "--";
 
   return (
-    <aside className="sidebar mini-sidebar">
+    <aside className="sidebar mini-sidebar" aria-label="Compact forecast controls">
       <button
         className="sidebar-toggle"
         type="button"
         onClick={onExpand}
         title="Expand controls"
+        aria-label="Expand forecast controls"
       >
         ⟩
       </button>
 
-      <div className="mini-block">
+      <div className="mini-block mini-mode-summary">
         <div className="mini-label">Mode</div>
         <div className={"mini-mode-badge " + mode}>{mode}</div>
       </div>
 
-      <div className="mini-block">
-      <div className="mini-label">Region</div>
-      <div className="mini-value">{meshLabel}</div>
-    </div>
+      <div className="mini-block mini-primary-summary">
+        <div className="mini-label">Region</div>
+        <div className="mini-value">{meshLabel}</div>
+      </div>
 
       {mode === "hurricane" ? (
         <>
-          <div className="mini-block">
+          <div className="mini-block mini-primary-summary">
             <div className="mini-label">Storm</div>
             <div className="mini-value">{hurricaneStormLabel}</div>
           </div>
 
-          {/* Cone data is currently unreliable so hiding this for now until we can confirm data and update styling as needed *\/}
-          <div className="mini-block">
-            <div className="mini-label">Cone</div>
-            <div className="mini-value">{showHurricaneCone ? "On" : "Off"}</div>
-          </div>
-          */}
-
-          <div className="mini-block">
+          <div className="mini-block mini-secondary-summary">
             <div className="mini-label">Track</div>
             <div className="mini-value">{showHurricaneTrackPoints ? "On" : "Off"}</div>
           </div>
         </>
       ) : null}
 
-      <div className="mini-block">
+      <div className="mini-block mini-primary-summary">
         <div className="mini-label">
           {mode === "hurricane" || mode === "archive" ? "Advisory" : "Date"}
         </div>
         <div className="mini-value">{formatMiniDate(mode, selectedDate)}</div>
       </div>
 
-      <div className="mini-block">
+      <div className="mini-block mini-primary-summary">
         <div className="mini-label">Run</div>
         <div className="mini-value">{formatRunLabel(selectedRun)}</div>
       </div>
 
-      <div className="mini-block">
+      <div className="mini-block mini-secondary-summary">
         <div className="mini-label">Layer</div>
         <div className="mini-value">{primaryLayer === "maxele" ? "Water" : "Wave"}</div>
       </div>
 
-      <div className="mini-block">
+      <div className="mini-block mini-secondary-summary">
         <div className="mini-label">Base</div>
         <div className="mini-value">{basemap}</div>
       </div>
 
-      <div className="mini-block">
+      <div className="mini-block mini-secondary-summary">
         <label className="mini-toggle">
           <input
             type="checkbox"
@@ -175,7 +373,7 @@ function MiniSidebar({
         </label>
       </div>
 
-      <div className="mini-block">
+      <div className="mini-block mini-secondary-summary">
         <label className="mini-toggle">
           <input
             type="checkbox"
@@ -199,6 +397,7 @@ export default function Sidebar(props) {
     mode,
     selectedDate,
     liveDates,
+    runsByDate,
     onDateChange,
     availableRuns,
     selectedRun,
@@ -263,7 +462,7 @@ export default function Sidebar(props) {
   }
 
   return (
-    <aside className="sidebar full-sidebar">
+    <aside className="sidebar full-sidebar" aria-label="Forecast controls">
       <div className="sidebar-header-row">
         <h2>Forecast Controls</h2>
         <button
@@ -271,6 +470,7 @@ export default function Sidebar(props) {
           type="button"
           onClick={onCollapseToggle}
           title="Collapse controls"
+          aria-label="Collapse forecast controls"
         >
           ⟨
         </button>
@@ -326,17 +526,26 @@ export default function Sidebar(props) {
             value={selectedAdvisory}
             onChange={(e) => onAdvisoryChange(e.target.value)}
           >
-            {availableAdvisories.map((advisory) => (
-              <option key={advisory} value={advisory}>
-                {advisory}
-              </option>
-            ))}
+              {availableAdvisories.map((advisory) => (
+                <option key={advisory} value={advisory}>
+                  {formatAdvisoryLabel(advisory)}
+                </option>
+              ))}
           </select>
+
+          <ForecastNavigator
+            values={availableAdvisories}
+            selectedValue={selectedAdvisory}
+            selectedRun={selectedRun}
+            latestRun={latestRunOverall}
+            onChange={onAdvisoryChange}
+            itemLabel="Advisory"
+          />
         </SidebarSection>
 
         <SidebarSection title="Forecast Run">
           <label>
-            Runs for {selectedAdvisory || "--"} ({availableRuns.length} available)
+            Runs for {formatAdvisoryLabel(selectedAdvisory)} ({availableRuns.length} available)
           </label>
           <RunPills
             runs={availableRuns}
@@ -349,6 +558,7 @@ export default function Sidebar(props) {
         </SidebarSection>
 
         <SidebarSection title="Layer">
+          <label htmlFor="primary-layer">Layer</label>
           <select
             id="primary-layer"
             value={primaryLayer}
@@ -412,15 +622,24 @@ export default function Sidebar(props) {
                 >
                   {liveDates.map((date) => (
                     <option key={date} value={date}>
-                      {date}
+                      {formatAdvisoryLabel(date)}
                     </option>
                   ))}
                 </select>
+
+                <ForecastNavigator
+                  values={liveDates}
+                  selectedValue={selectedDate}
+                  selectedRun={selectedRun}
+                  latestRun={latestRunOverall}
+                  onChange={onDateChange}
+                  itemLabel="Advisory"
+                />
               </SidebarSection>
 
               <SidebarSection title="Forecast Run">
                 <label>
-                  Runs for {selectedDate || "--"} ({availableRuns.length} available)
+                  Runs for {formatAdvisoryLabel(selectedDate)} ({availableRuns.length} available)
                 </label>
 
                 <RunPills
@@ -435,21 +654,8 @@ export default function Sidebar(props) {
             </>
           )}
 
-          <SidebarSection title="Forecast Run">
-            <label>
-              Runs for {selectedDate || "--"} ({availableRuns.length} available)
-            </label>
-            <RunPills
-              runs={availableRuns}
-              selectedRun={selectedRun}
-              onRunChange={onRunChange}
-              latestRun={latestRunOverall}
-              selectedDate={selectedDate}
-              latestDateOverall={latestDateOverall}
-            />
-          </SidebarSection>
-
           <SidebarSection title="Layer">
+            <label htmlFor="primary-layer">Layer</label>
             <select
               id="primary-layer"
               value={primaryLayer}
@@ -497,6 +703,7 @@ export default function Sidebar(props) {
                 <option key={date} value={date} />
               ))}
             </datalist>
+
           </SidebarSection>
 
           <SidebarSection title="Forecast Run">
@@ -510,6 +717,15 @@ export default function Sidebar(props) {
               latestRun={latestRunOverall}
               selectedDate={selectedDate}
               latestDateOverall={latestDateOverall}
+            />
+
+            <DailyForecastNavigator
+              dates={liveDates}
+              runsByDate={runsByDate}
+              selectedDate={selectedDate}
+              selectedRun={selectedRun}
+              onDateChange={onDateChange}
+              onRunChange={onRunChange}
             />
           </SidebarSection>
 

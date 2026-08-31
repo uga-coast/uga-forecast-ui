@@ -10,6 +10,9 @@ import { LAYER_CONFIGS } from "./config/layers.js";
 const S3_BASE_URL = "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com";
 const MANIFEST_URL = `${S3_BASE_URL}/raster-manifest.json`;
 const MODES = { DAILY: "daily", HURRICANE: "hurricane", ARCHIVE: "archive" };
+const VALID_MODES = new Set(Object.values(MODES));
+const VALID_LAYERS = new Set(["maxele", "swan_HS_max"]);
+const VALID_BASEMAPS = new Set(["aerial", "charcoal", "light", "topo"]);
 
 const ADCIRC_TIMESERIES_API =
   "https://tiles.gafloodforecast.com/adcirc/timeseries";
@@ -369,30 +372,160 @@ function formatAdvisoryIssuedTime(value) {
   return date ? formatUtcDate(date) : "—";
 }
 
+function formatAdvisoryLabel(advisory) {
+  if (!advisory) return "--";
+
+  const number = String(advisory).match(/(\d+)$/)?.[1];
+  return number ? `Advisory ${Number(number)}` : advisory;
+}
+
+function formatRunLabel(run) {
+  if (!run) return "--";
+  if (String(run).toLowerCase() === "ofcl") return "Official";
+  if (/^\d+$/.test(String(run))) return `${run}Z`;
+  return run;
+}
+
+function readUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  const modeParam = params.get("mode");
+  const layerParam = params.get("layer");
+  const basemapParam = params.get("basemap");
+  const opacityRaw = params.get("opacity");
+  const latRaw = params.get("lat");
+  const lonRaw = params.get("lon");
+  const zoomRaw = params.get("zoom");
+  const opacityParam = opacityRaw == null ? Number.NaN : Number(opacityRaw);
+  const lat = latRaw == null ? Number.NaN : Number(latRaw);
+  const lon = lonRaw == null ? Number.NaN : Number(lonRaw);
+  const zoom = zoomRaw == null ? Number.NaN : Number(zoomRaw);
+
+  return {
+    mode: VALID_MODES.has(modeParam) ? modeParam : MODES.DAILY,
+    mesh: params.get("mesh") || "",
+    hurricaneStorm: params.get("storm") || "",
+    archiveStorm: params.get("storm") || "",
+    year: params.get("year") || "",
+    date: params.get("date") || "",
+    run: params.get("run") || "",
+    layer: VALID_LAYERS.has(layerParam) ? layerParam : "maxele",
+    basemap: VALID_BASEMAPS.has(basemapParam) ? basemapParam : "aerial",
+    opacity:
+      Number.isFinite(opacityParam) && opacityParam >= 0 && opacityParam <= 100
+        ? opacityParam
+        : 80,
+    stationsVisible: params.get("stations") !== "0",
+    mapView:
+      Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(zoom)
+        ? { lat, lon, zoom }
+        : null
+  };
+}
+
+function isNarrowViewport() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+
+function AccessibleModal({ title, titleId, onDismiss, className = "", children }) {
+  const dialogRef = useRef(null);
+  const dismissRef = useRef(onDismiss);
+
+  useEffect(() => {
+    dismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const dialog = dialogRef.current;
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    dialog?.querySelector(focusableSelector)?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismissRef.current?.();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialog) return;
+
+      const focusable = Array.from(dialog.querySelectorAll(focusableSelector));
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, []);
+
+  return (
+    <div className="disclaimer-overlay">
+      <div
+        ref={dialogRef}
+        className={`disclaimer-modal ${className}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <h2 id={titleId}>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const initialUrlState = useMemo(() => readUrlState(), []);
   // set the default mode to daily for now, but this could be changed to hurricane or archive if desired
-  const [mode, setMode] = useState(MODES.DAILY);
+  const [mode, setMode] = useState(initialUrlState.mode);
   //const [mode, setMode] = useState(MODES.HURRICANE);
   const [manifest, setManifest] = useState(null);
   const [manifestStatus, setManifestStatus] = useState("loading");
-  const [primaryLayer, setPrimaryLayer] = useState("maxele");
+  const [primaryLayer, setPrimaryLayer] = useState(initialUrlState.layer);
 
-  const [selectedMesh, setSelectedMesh] = useState("");
-  const [selectedHurricaneStorm, setSelectedHurricaneStorm] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedArchiveStorm, setSelectedArchiveStorm] = useState("");
+  const [selectedMesh, setSelectedMesh] = useState(initialUrlState.mesh);
+  const [selectedHurricaneStorm, setSelectedHurricaneStorm] = useState(
+    initialUrlState.hurricaneStorm
+  );
+  const [selectedYear, setSelectedYear] = useState(initialUrlState.year);
+  const [selectedArchiveStorm, setSelectedArchiveStorm] = useState(
+    initialUrlState.archiveStorm
+  );
 
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedRun, setSelectedRun] = useState("");
-  const [stationsVisible, setStationsVisible] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(initialUrlState.date);
+  const [selectedRun, setSelectedRun] = useState(initialUrlState.run);
+  const [stationsVisible, setStationsVisible] = useState(
+    initialUrlState.stationsVisible
+  );
   const [pointHydrographEnabled, setPointHydrographEnabled] = useState(false);
-  const [opacity, setOpacity] = useState(80);
+  const [opacity, setOpacity] = useState(initialUrlState.opacity);
   const [selectedStation, setSelectedStation] = useState(null);
   const [selectedPointForecastUrl, setSelectedPointForecastUrl] = useState(null);
   const [panelHeight, setPanelHeight] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [basemap, setBasemap] = useState("aerial");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isNarrowViewport);
+  const [basemap, setBasemap] = useState(initialUrlState.basemap);
+  const [mapView, setMapView] = useState(initialUrlState.mapView);
   const [showHurricaneCone, setShowHurricaneCone] = useState(true);
   const [showHurricaneTrackPoints, setShowHurricaneTrackPoints] = useState(true);
   const [rasterStatus, setRasterStatus] = useState({
@@ -410,6 +543,17 @@ export default function App() {
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [showNoHurricaneRuns, setShowNoHurricaneRuns] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 720px)");
+    const handleChange = (event) => {
+      if (event.matches) setSidebarCollapsed(true);
+    };
+
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("forecastDisclaimerAccepted");
@@ -589,10 +733,11 @@ export default function App() {
       return;
     }
 
-    const nextRun =
+    const defaultRun =
       isStormMode(mode)
         ? runs.find((run) => String(run).toLowerCase() === "ofcl") || runs[runs.length - 1]
         : runs[runs.length - 1];
+    const nextRun = runs.includes(selectedRun) ? selectedRun : defaultRun;
 
     if (selectedDate !== nextDate) {
       setSelectedDate(nextDate);
@@ -728,6 +873,14 @@ export default function App() {
     };
   }, [isResizing]);
 
+  function resizePanelBy(delta) {
+    setPanelHeight((currentHeight) => {
+      const contentHeight = contentRef.current?.getBoundingClientRect().height || 640;
+      const maxHeight = Math.max(320, Math.floor(contentHeight * 0.75));
+      return Math.min(maxHeight, Math.max(220, currentHeight + delta));
+    });
+  }
+
   function resetInteractiveState() {
     setSelectedStation(null);
     setSelectedPointForecastUrl(null);
@@ -787,18 +940,78 @@ export default function App() {
     setSelectedYear("");
   }
 
+  async function handleCopyShareLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareStatus("Link copied");
+    } catch {
+      setShareStatus("Unable to copy link");
+    }
+
+    window.setTimeout(() => setShareStatus(""), 2500);
+  }
+
+  useEffect(() => {
+    if (manifestStatus !== "ready" || !selectedMesh || !selectedDate || !selectedRun) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("mode", mode);
+    params.set("mesh", selectedMesh);
+    params.set("date", selectedDate);
+    params.set("run", selectedRun);
+    params.set("layer", chosenLayer);
+    params.set("basemap", basemap);
+
+    if (mode === MODES.HURRICANE && selectedHurricaneStorm) {
+      params.set("storm", selectedHurricaneStorm);
+    }
+
+    if (mode === MODES.ARCHIVE) {
+      if (selectedYear) params.set("year", selectedYear);
+      if (selectedArchiveStorm) params.set("storm", selectedArchiveStorm);
+    }
+
+    if (opacity !== 80) params.set("opacity", String(opacity));
+    if (!stationsVisible) params.set("stations", "0");
+
+    if (mapView) {
+      params.set("lat", mapView.lat.toFixed(5));
+      params.set("lon", mapView.lon.toFixed(5));
+      params.set("zoom", String(mapView.zoom));
+    }
+
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, "", nextUrl);
+  }, [
+    manifestStatus,
+    mode,
+    selectedMesh,
+    selectedDate,
+    selectedRun,
+    selectedHurricaneStorm,
+    selectedYear,
+    selectedArchiveStorm,
+    chosenLayer,
+    basemap,
+    opacity,
+    stationsVisible,
+    mapView
+  ]);
+
   const statusText = useMemo(() => {
     const isLatest = selectedDate === latestDateOverall && selectedRun === latestRunOverall;
 
     if (mode === MODES.ARCHIVE) {
-      return `Archive | ${selectedMeshLabel || "--"} | ${selectedYear || "--"} | ${selectedArchiveStormLabel || "--"} | ${selectedDate || "--"} | ${selectedRun || "--"}${isLatest ? " (Latest)" : ""}`;
+      return `Archive | ${selectedMeshLabel || "--"} | ${selectedYear || "--"} | ${selectedArchiveStormLabel || "--"} | ${formatAdvisoryLabel(selectedDate)} | ${formatRunLabel(selectedRun)}${isLatest ? " (Latest)" : ""}`;
     }
 
     if (mode === MODES.HURRICANE) {
-      return `Hurricane | ${selectedMeshLabel || "--"} | ${selectedHurricaneStormLabel || "--"} | ${selectedDate} | ${selectedRun}${isLatest ? " (Latest)" : ""}`;
+      return `Hurricane | ${selectedMeshLabel || "--"} | ${selectedHurricaneStormLabel || "--"} | ${formatAdvisoryLabel(selectedDate)} | ${formatRunLabel(selectedRun)}${isLatest ? " (Latest)" : ""}`;
     }
 
-    return `Daily | ${selectedMeshLabel || "--"} | ${selectedDate} | ${selectedRun}${isLatest ? " (Latest)" : ""}`;
+    return `Daily | ${selectedMeshLabel || "--"} | ${selectedDate} | ${formatRunLabel(selectedRun)}${isLatest ? " (Latest)" : ""}`;
   }, [
     mode,
     selectedMeshLabel,
@@ -853,25 +1066,18 @@ export default function App() {
     return buildStationAnalysisUrl(runBaseUrl, selectedStation.id);
   }, [selectedStation, runBaseUrl]);
 
-  console.log({
-    mode,
-    selectedMesh,
-    selectedYear,
-    selectedArchiveStorm,
-    selectedDate,
-    selectedRun,
-    rasterUrl,
-    liveDates,
-    availableRuns
-  });
-
   return (
     <div className="app-page">
-      {showDisclaimer && (
-        <div className="disclaimer-overlay">
-          <div className="disclaimer-modal">
-            <h2>Experimental Research Product</h2>
+      <a className="skip-link" href="#forecast-main">
+        Skip to forecast map
+      </a>
 
+      {showDisclaimer && (
+        <AccessibleModal
+          title="Experimental Research Product"
+          titleId="disclaimer-title"
+          onDismiss={() => setShowDisclaimer(false)}
+        >
             <p>
               This website provides experimental coastal flood forecast information,
               model results, and related data products for research,
@@ -911,18 +1117,19 @@ export default function App() {
             <button
               className="disclaimer-button"
               onClick={handleDisclaimerContinue}
+              type="button"
             >
               Continue
             </button>
-          </div>
-        </div>
+        </AccessibleModal>
       )}
 
       {showNoHurricaneRuns && (
-        <div className="disclaimer-overlay">
-          <div className="disclaimer-modal">
-            <h2>No Active Hurricane Forecasts</h2>
-
+        <AccessibleModal
+          title="No Active Hurricane Forecasts"
+          titleId="no-hurricane-runs-title"
+          onDismiss={() => setShowNoHurricaneRuns(false)}
+        >
             <p>
               There are currently no active hurricane forecast runs available.
             </p>
@@ -934,17 +1141,20 @@ export default function App() {
             <button
               className="disclaimer-button"
               onClick={() => setShowNoHurricaneRuns(false)}
+              type="button"
             >
               Close
             </button>
-          </div>
-        </div>
+        </AccessibleModal>
       )}
 
       {showContact && (
-        <div className="disclaimer-overlay">
-          <div className="disclaimer-modal contact-modal">
-            <h2>Contact</h2>
+        <AccessibleModal
+          title="Contact"
+          titleId="contact-title"
+          onDismiss={() => setShowContact(false)}
+          className="contact-modal"
+        >
             <p>
               Questions, feedback, bug reports, or collaboration inquiries:
             </p>
@@ -961,11 +1171,11 @@ export default function App() {
             <button
               className="disclaimer-button"
               onClick={() => setShowContact(false)}
+              type="button"
             >
               Close
             </button>
-          </div>
-        </div>
+        </AccessibleModal>
       )}
 
       <Header />
@@ -980,6 +1190,7 @@ export default function App() {
           waveLayerAvailable={waveLayerAvailable}
           selectedDate={selectedDate}
           liveDates={liveDates}
+          runsByDate={runsByDate}
           onDateChange={handleDateChange}
           latestDateOverall={latestDateOverall}
           latestRunOverall={latestRunOverall}
@@ -1046,22 +1257,24 @@ export default function App() {
           layerConfig={LAYER_CONFIGS[chosenLayer]}
         />
 
-        <div className="main-panel">
+        <main className="main-panel" id="forecast-main" tabIndex={-1}>
           <TopBar
             mode={mode}
             onModeChange={handleModeChange}
             statusText={statusText}
             activeLayerText={activeLayerText}
+            onShare={handleCopyShareLink}
+            shareStatus={shareStatus}
           />
 
           {mode === MODES.HURRICANE && hurricaneBannerText && (
-            <div className="banner banner-hurricane">
+            <div className="banner banner-hurricane" role="status">
               {hurricaneBannerText}
             </div>
           )}
 
           {mode === MODES.ARCHIVE && (
-            <div className="banner banner-archive">
+            <div className="banner banner-archive" role="status">
               Archived Forecast — Not Current Conditions
               {hurricaneBannerText ? ` • ${hurricaneBannerText}` : ""}
             </div>
@@ -1075,7 +1288,6 @@ export default function App() {
               opacity={opacity}
               onStationSelect={setSelectedStation}
               rasterUrl={rasterUrl}
-              rasterStatus={rasterStatus}
               onRasterStatusChange={setRasterStatus}
               basemap={basemap}
               pinnedValue={pinnedValue}
@@ -1116,11 +1328,19 @@ export default function App() {
               runBaseUrl={runBaseUrl}
               showHurricaneCone={showHurricaneCone}
               showHurricaneTrackPoints={showHurricaneTrackPoints}
+              initialMapView={initialUrlState.mapView}
+              onMapViewChange={setMapView}
             />
+
+            <div className="sr-only" role="status" aria-live="polite">
+              {rasterStatus.message}
+            </div>
 
             <div
               className={"station-panel " + (selectedStation ? "open" : "")}
               style={selectedStation ? { height: panelHeight + "px" } : undefined}
+              role={selectedStation ? "region" : undefined}
+              aria-label={selectedStation ? `${selectedStation.name} details` : undefined}
             >
               {selectedStation ? (
                 <StationPanel
@@ -1138,11 +1358,12 @@ export default function App() {
                     setSelectedPointForecastUrl(null);
                   }}
                   onResizeStart={() => setIsResizing(true)}
+                  onResizeBy={resizePanelBy}
                 />
               ) : null}
             </div>
           </div>
-        </div>
+        </main>
       </div>
 
       {!selectedStation && (
@@ -1150,6 +1371,7 @@ export default function App() {
           <button
             className="floating-action-button"
             onClick={() => setShowDisclaimer(true)}
+            type="button"
           >
             Disclaimer
           </button>
@@ -1157,6 +1379,7 @@ export default function App() {
           <button
             className="floating-action-button"
             onClick={() => setShowContact(true)}
+            type="button"
           >
             Contact
           </button>

@@ -5,7 +5,7 @@ import twi from "../assets/twi.png";
 export default function Header() {
   return (
     <header className="header">
-      <div className="title-left">UGA Coastal Flood Forecast Viewer</div>
+      <h1 className="title-left">UGA Coastal Flood Forecast Viewer</h1>
       <div className="logo-group" aria-label="Partner logos">
         <div className="logo-card">
           <img src={uga} className="logo uga" alt="UGA Coast logo" />
