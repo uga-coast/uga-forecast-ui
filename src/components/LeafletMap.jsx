@@ -304,6 +304,16 @@ function buildHurricanePointTooltip(properties = {}) {
   `;
 }
 
+function buildHurricanePointAccessibleLabel(properties = {}) {
+  const category = getStormCategoryFromKnots(properties.maxWindKt);
+  const segment =
+    properties.segment === "past"
+      ? "Past storm track point"
+      : "Forecast storm track point";
+  const wind = formatWindMph(properties.maxWindKt);
+  return `${segment}, ${getStormTypeLabel(category)}, maximum wind ${wind}`;
+}
+
 function MapEffects({ bounds, shouldFitBounds }) {
   const map = useMap();
 
@@ -316,7 +326,7 @@ function MapEffects({ bounds, shouldFitBounds }) {
   return null;
 }
 
-function MapBridge({ mapRef, onMapClick, onReady }) {
+function MapBridge({ mapRef, onMapClick, onReady, onViewChange }) {
   const map = useMap();
 
   useEffect(() => {
@@ -324,12 +334,25 @@ function MapBridge({ mapRef, onMapClick, onReady }) {
     onReady?.(map);
 
     const handleClick = (e) => onMapClick?.(e);
+    const handleViewChange = () => {
+      const center = map.getCenter();
+      onViewChange?.({
+        lat: center.lat,
+        lon: center.lng,
+        zoom: map.getZoom()
+      });
+    };
+
     map.on("click", handleClick);
+    map.on("moveend", handleViewChange);
+    map.on("zoomend", handleViewChange);
 
     return () => {
       map.off("click", handleClick);
+      map.off("moveend", handleViewChange);
+      map.off("zoomend", handleViewChange);
     };
-  }, [map, mapRef, onMapClick, onReady]);
+  }, [map, mapRef, onMapClick, onReady, onViewChange]);
 
   return null;
 }
@@ -338,7 +361,11 @@ function MapLegend({ layerConfig }) {
   if (!layerConfig) return null;
 
   return (
-    <div className="map-legend">
+    <div
+      className="map-legend"
+      role="img"
+      aria-label={`${layerConfig.legendTitle || layerConfig.label || "Map legend"}: ${(layerConfig.legendTicks || []).join(", ")}`}
+    >
       <div className="map-legend-title">
         {layerConfig.legendTitle || layerConfig.label || "Legend"}
       </div>
@@ -410,7 +437,9 @@ export default function LeafletMap({
   hurricaneMeta,
   runBaseUrl,
   showHurricaneCone,
-  showHurricaneTrackPoints
+  showHurricaneTrackPoints,
+  initialMapView,
+  onMapViewChange
 }) {
   const bounds = useMemo(() => DAILY_DEFAULT_BOUNDS, []);
 
@@ -419,6 +448,7 @@ export default function LeafletMap({
   const currentBasemapLabels = currentBasemap.labels;
 
   const mapRef = useRef(null);
+  const hasAppliedInitialViewRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
@@ -426,13 +456,25 @@ export default function LeafletMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current || !selectedMesh) return;
 
+    if (!hasAppliedInitialViewRef.current && initialMapView) {
+      mapRef.current.setView(
+        [initialMapView.lat, initialMapView.lon],
+        initialMapView.zoom,
+        { animate: false }
+      );
+      hasAppliedInitialViewRef.current = true;
+      return;
+    }
+
+    hasAppliedInitialViewRef.current = true;
+
     const view = MESH_DEFAULT_VIEWS[selectedMesh];
     if (!view) return;
 
     mapRef.current.setView(view.center, view.zoom, {
       animate: true
     });
-  }, [mapReady, selectedMesh]);
+  }, [mapReady, selectedMesh, initialMapView]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -714,6 +756,8 @@ export default function LeafletMap({
                 const p = feature.properties || {};
                 return L.marker(latlng, {
                   icon: createHurricanePointIcon(p.segment, p.maxWindKt),
+                  title: buildHurricanePointAccessibleLabel(p),
+                  alt: buildHurricanePointAccessibleLabel(p),
                   zIndexOffset: 100
                 });
               },
@@ -741,6 +785,8 @@ export default function LeafletMap({
                 const p = feature.properties || {};
                 return L.marker(latlng, {
                   icon: createHurricanePointIcon(p.segment, p.maxWindKt),
+                  title: buildHurricanePointAccessibleLabel(p),
+                  alt: buildHurricanePointAccessibleLabel(p),
                   zIndexOffset:
                     p.segment === "forecast" || p.segment === "simulation"
                       ? 200
@@ -770,6 +816,8 @@ export default function LeafletMap({
                 const p = feature.properties || {};
                 return L.marker(latlng, {
                   icon: createHurricanePointIcon(p.segment, p.maxWindKt),
+                  title: buildHurricanePointAccessibleLabel(p),
+                  alt: buildHurricanePointAccessibleLabel(p),
                   zIndexOffset: 200
                 });
               },
@@ -826,17 +874,25 @@ export default function LeafletMap({
   ]);
 
   return (
-    <div className={`map-shell basemap-${basemap}`}>
+    <div
+      className={`map-shell basemap-${basemap}`}
+      role="region"
+      aria-label="Interactive coastal flood forecast map"
+    >
       {showSpinner && (
-        <div className="spinner-overlay">
-          <div className="spinner" />
+        <div className="spinner-overlay" role="status" aria-live="polite">
+          <div className="spinner" aria-hidden="true" />
           <div className="spinner-text">Loading raster…</div>
         </div>
       )}
 
       <MapContainer
-        center={[31.5, -81.0]}
-        zoom={6}
+        center={
+          initialMapView
+            ? [initialMapView.lat, initialMapView.lon]
+            : [31.5, -81.0]
+        }
+        zoom={initialMapView?.zoom ?? 6}
         className="leaflet-map"
         zoomControl={false}
       >
@@ -844,6 +900,7 @@ export default function LeafletMap({
           mapRef={mapRef}
           onMapClick={handleMapClick}
           onReady={() => setMapReady(true)}
+          onViewChange={onMapViewChange}
         />
 
         <TileLayer
@@ -949,6 +1006,8 @@ export default function LeafletMap({
           <Marker
             position={[pinnedValue.latlng.lat, pinnedValue.latlng.lng]}
             icon={pinnedIcon}
+            title="Selected map point"
+            alt="Selected map point"
           />
         )}
 
@@ -958,6 +1017,8 @@ export default function LeafletMap({
               key={station.id}
               position={[station.lat, station.lon]}
               icon={stationIcon}
+              title={`${station.name} NOAA station`}
+              alt={`${station.name} NOAA station`}
               eventHandlers={{ click: () => onStationSelect(station) }}
             />
           ))}

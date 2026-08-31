@@ -268,7 +268,8 @@ export default function StationPanel({
   forecastCycleTime,
   runMeta,
   onClose,
-  onResizeStart
+  onResizeStart,
+  onResizeBy
 }) {
 
   const [noaaData, setNoaaData] = useState([]);
@@ -595,8 +596,25 @@ function handleChartMouseLeave() {
 
   return (
     <div className="station-panel-inner">
-      <div className="station-resize-handle" onMouseDown={onResizeStart} title="Drag to resize">
-        <div className="station-resize-grip" />
+      <div
+        className="station-resize-handle"
+        onMouseDown={onResizeStart}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            onResizeBy?.(24);
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            onResizeBy?.(-24);
+          }
+        }}
+        title="Drag to resize, or use the up and down arrow keys"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize station details panel"
+        tabIndex={0}
+      >
+        <div className="station-resize-grip" aria-hidden="true" />
       </div>
 
       <div className="station-topbar">
@@ -647,7 +665,12 @@ function handleChartMouseLeave() {
           )}
         </div>
 
-        <button className="station-close" onClick={onClose} type="button">
+        <button
+          className="station-close"
+          onClick={onClose}
+          type="button"
+          aria-label={`Close ${station.name} details`}
+        >
           Close
         </button>
       </div>
@@ -665,11 +688,11 @@ function handleChartMouseLeave() {
             ref={chartContainerRef}
           >
             {noaaStatus === "loading" && forecastStatus === "loading" && (
-              <div className="chart-empty-state">Loading station data…</div>
+              <div className="chart-empty-state" role="status">Loading station data…</div>
             )}
 
             {!hasAnyChartData && noaaStatus === "error" && forecastStatus === "error" && (
-              <div className="chart-empty-state">Failed to load observed and forecast data</div>
+              <div className="chart-empty-state" role="alert">Failed to load observed and forecast data</div>
             )}
 
             {!hasAnyChartData &&
@@ -697,7 +720,12 @@ function handleChartMouseLeave() {
                 className="chart-svg"
                 preserveAspectRatio="xMidYMid meet"
                 style={{ display: "block", width: "100%", height: `${chartHeight}px` }}
+                role="img"
+                aria-labelledby="station-chart-title"
               >
+                  <title id="station-chart-title">
+                    Water level observations and forecast for {station.name}
+                  </title>
                   {buildGridLines(chartWidth, chartHeight, margin, chartStats, yTickStep)}
 
                   {chartStats &&
