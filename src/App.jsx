@@ -106,13 +106,11 @@ function getHurricaneStorms(manifest, selectedMesh) {
   const storms = manifest?.hurricane?.meshes?.[selectedMesh]?.storms || {};
 
   return Object.entries(storms)
-    .sort(([, a], [, b]) => {
-      const aLatest = Object.keys(a?.advisories || {}).sort().reverse()[0] || "";
-      const bLatest = Object.keys(b?.advisories || {}).sort().reverse()[0] || "";
-
-      // Newest advisory first
-      return bLatest.localeCompare(aLatest);
-    })
+    .sort(([aKey, a], [bKey, b]) =>
+      (b?.label || bKey).localeCompare(a?.label || aKey, undefined, {
+        sensitivity: "base"
+      })
+    )
     .map(([key, value]) => ({
       key,
       label: value?.label || key
