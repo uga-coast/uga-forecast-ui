@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Header from "./components/Header.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
@@ -6,6 +6,12 @@ import LeafletMap from "./components/LeafletMap.jsx";
 import StationPanel from "./components/StationPanel.jsx";
 import { STATIONS_BY_REGION } from "./data/stations.js";
 import { LAYER_CONFIGS } from "./config/layers.js";
+import { OBSERVATION_PROVIDERS } from "./config/observations.js";
+import {
+  fetchLatestObservationTimes,
+  getObservationStatus,
+  stationKey
+} from "./services/observations.js";
 
 const S3_BASE_URL = "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com";
 const MANIFEST_URL = `${S3_BASE_URL}/raster-manifest.json`;
@@ -13,6 +19,7 @@ const MODES = { DAILY: "daily", HURRICANE: "hurricane", ARCHIVE: "archive" };
 const VALID_MODES = new Set(Object.values(MODES));
 const VALID_LAYERS = new Set(["maxele", "swan_HS_max"]);
 const VALID_BASEMAPS = new Set(["aerial", "charcoal", "light", "topo"]);
+const EMPTY_STATIONS = [];
 
 const ADCIRC_TIMESERIES_API =
   "https://tiles.gafloodforecast.com/adcirc/timeseries";
@@ -413,6 +420,11 @@ function readUrlState() {
         ? opacityParam
         : 80,
     stationsVisible: params.get("stations") !== "0",
+    stationProviders: {
+      [OBSERVATION_PROVIDERS.NOAA]: params.get("noaa") !== "0",
+      [OBSERVATION_PROVIDERS.SSLS]: params.get("ssls") === "1",
+      [OBSERVATION_PROVIDERS.USGS]: params.get("usgs") === "1"
+    },
     mapView:
       Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(zoom)
         ? { lat, lon, zoom }
@@ -492,6 +504,35 @@ function AccessibleModal({ title, titleId, onDismiss, className = "", children }
   );
 }
 
+class StationPanelErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidUpdate(previousProps) {
+    if (previousProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="station-panel-error" role="alert">
+        <strong>{this.props.stationName}</strong>
+        <span>Station details could not be displayed.</span>
+        <button type="button" onClick={this.props.onClose}>Close</button>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   const initialUrlState = useMemo(() => readUrlState(), []);
   // set the default mode to daily for now, but this could be changed to hurricane or archive if desired
@@ -515,9 +556,14 @@ export default function App() {
   const [stationsVisible, setStationsVisible] = useState(
     initialUrlState.stationsVisible
   );
+  const [stationProviders, setStationProviders] = useState(
+    initialUrlState.stationProviders
+  );
   const [pointHydrographEnabled, setPointHydrographEnabled] = useState(false);
   const [opacity, setOpacity] = useState(initialUrlState.opacity);
   const [selectedStation, setSelectedStation] = useState(null);
+  const [latestObservationTimes, setLatestObservationTimes] = useState({});
+  const [observationStatusesLoaded, setObservationStatusesLoaded] = useState(false);
   const [selectedPointForecastUrl, setSelectedPointForecastUrl] = useState(null);
   const [panelHeight, setPanelHeight] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -536,6 +582,20 @@ export default function App() {
   });
   const [pinCopyStatus, setPinCopyStatus] = useState("");
   const contentRef = useRef(null);
+
+  const handleMapViewChange = useCallback((nextView) => {
+    setMapView((currentView) => {
+      if (
+        currentView &&
+        Math.abs(currentView.lat - nextView.lat) < 1e-7 &&
+        Math.abs(currentView.lon - nextView.lon) < 1e-7 &&
+        currentView.zoom === nextView.zoom
+      ) {
+        return currentView;
+      }
+      return nextView;
+    });
+  }, []);
 
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -973,6 +1033,9 @@ export default function App() {
 
     if (opacity !== 80) params.set("opacity", String(opacity));
     if (!stationsVisible) params.set("stations", "0");
+    if (!stationProviders[OBSERVATION_PROVIDERS.NOAA]) params.set("noaa", "0");
+    if (stationProviders[OBSERVATION_PROVIDERS.SSLS]) params.set("ssls", "1");
+    if (stationProviders[OBSERVATION_PROVIDERS.USGS]) params.set("usgs", "1");
 
     if (mapView) {
       params.set("lat", mapView.lat.toFixed(5));
@@ -995,6 +1058,7 @@ export default function App() {
     basemap,
     opacity,
     stationsVisible,
+    stationProviders,
     mapView
   ]);
 
@@ -1056,13 +1120,66 @@ export default function App() {
   const selectedMeshInfo =
     availableMeshes.find((mesh) => mesh.key === selectedMesh) || null;
 
-  const activeStations =
-    STATIONS_BY_REGION[selectedMeshInfo?.region] ?? [];
+  const configuredStations = STATIONS_BY_REGION[selectedMeshInfo?.region] ?? EMPTY_STATIONS;
+  const enabledObservationStations = useMemo(
+    () => configuredStations.filter(
+      (station) => stationProviders[station.provider] !== false
+    ),
+    [configuredStations, stationProviders]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setObservationStatusesLoaded(false);
+
+    async function refreshObservationTimes() {
+      const latest = await fetchLatestObservationTimes(
+        enabledObservationStations,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        setLatestObservationTimes(latest);
+        setObservationStatusesLoaded(true);
+      }
+    }
+
+    refreshObservationTimes();
+    const refreshTimer = window.setInterval(refreshObservationTimes, 5 * 60 * 1000);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(refreshTimer);
+    };
+  }, [enabledObservationStations]);
+
+  const activeStations = useMemo(
+    () => configuredStations.map((station) => {
+      const latestObservationTime = latestObservationTimes[stationKey(station)] || null;
+      return {
+        ...station,
+        latestObservationTime,
+        observationStatus: !observationStatusesLoaded
+          ? "loading"
+          : station.hasObservations
+            ? getObservationStatus(latestObservationTime, station.provider)
+            : station.observationStatus || "offline"
+      };
+    }),
+    [configuredStations, latestObservationTimes, observationStatusesLoaded]
+  );
+
+  const selectedStationDetails = selectedStation?.isAdcircPoint
+    ? selectedStation
+    : activeStations.find(
+        (station) => stationKey(station) === stationKey(selectedStation)
+      ) || selectedStation;
 
   const analysisJsonUrl = useMemo(() => {
-    if (!selectedStation || selectedStation?.isAdcircPoint) return null;
-    return buildStationAnalysisUrl(runBaseUrl, selectedStation.id);
-  }, [selectedStation, runBaseUrl]);
+    if (!selectedStationDetails || selectedStationDetails.isAdcircPoint || !selectedStationDetails.hasModelData) {
+      return null;
+    }
+    return buildStationAnalysisUrl(runBaseUrl, selectedStationDetails.id);
+  }, [selectedStationDetails, runBaseUrl]);
 
   return (
     <div className="app-page">
@@ -1200,6 +1317,14 @@ export default function App() {
           }}
           stationsVisible={stationsVisible}
           onStationsVisibleChange={setStationsVisible}
+          stationProviders={stationProviders}
+          onStationProviderChange={(provider, visible) => {
+            setStationProviders((current) => ({ ...current, [provider]: visible }));
+            if (!visible && selectedStation?.provider === provider) {
+              setSelectedStation(null);
+              setSelectedPointForecastUrl(null);
+            }
+          }}
           pointHydrographEnabled={pointHydrographEnabled}
           pointHydrographAvailable={pointHydrographAvailable}
           onPointHydrographEnabledChange={(enabled) => {
@@ -1281,7 +1406,9 @@ export default function App() {
           <div className="content-area" ref={contentRef}>
             <LeafletMap
               selectedMesh={selectedMesh}
-              stations={activeStations}
+              stations={activeStations.filter(
+                (station) => stationProviders[station.provider] !== false
+              )}
               stationsVisible={stationsVisible}
               opacity={opacity}
               onStationSelect={setSelectedStation}
@@ -1327,7 +1454,7 @@ export default function App() {
               showHurricaneCone={showHurricaneCone}
               showHurricaneTrackPoints={showHurricaneTrackPoints}
               initialMapView={initialUrlState.mapView}
-              onMapViewChange={setMapView}
+              onMapViewChange={handleMapViewChange}
             />
 
             <div className="sr-only" role="status" aria-live="polite">
@@ -1341,23 +1468,34 @@ export default function App() {
               aria-label={selectedStation ? `${selectedStation.name} details` : undefined}
             >
               {selectedStation ? (
-                <StationPanel
-                  station={selectedStation}
-                  forecastJsonUrl={
-                    selectedStation?.isAdcircPoint
-                      ? selectedPointForecastUrl
-                      : forecastJsonUrl
-                  }
-                  analysisJsonUrl={analysisJsonUrl}
-                  forecastCycleTime={forecastCycleTime}
-                  runMeta={runMeta}
+                <StationPanelErrorBoundary
+                  resetKey={stationKey(selectedStationDetails)}
+                  stationName={selectedStationDetails?.name || "Selected station"}
                   onClose={() => {
                     setSelectedStation(null);
                     setSelectedPointForecastUrl(null);
                   }}
-                  onResizeStart={() => setIsResizing(true)}
-                  onResizeBy={resizePanelBy}
-                />
+                >
+                  <StationPanel
+                    station={selectedStationDetails}
+                    forecastJsonUrl={
+                      selectedStation?.isAdcircPoint
+                        ? selectedPointForecastUrl
+                        : selectedStationDetails?.hasModelData
+                          ? forecastJsonUrl
+                          : null
+                    }
+                    analysisJsonUrl={analysisJsonUrl}
+                    forecastCycleTime={forecastCycleTime}
+                    runMeta={runMeta}
+                    onClose={() => {
+                      setSelectedStation(null);
+                      setSelectedPointForecastUrl(null);
+                    }}
+                    onResizeStart={() => setIsResizing(true)}
+                    onResizeBy={resizePanelBy}
+                  />
+                </StationPanelErrorBoundary>
               ) : null}
             </div>
           </div>

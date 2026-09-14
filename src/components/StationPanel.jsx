@@ -1,65 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { OBSERVATION_STATUS_LABELS } from "../config/observations.js";
+import {
+  fetchStationObservations,
+  parseObservationDate
+} from "../services/observations.js";
 
 function formatUtcTimestamp(timestamp) {
   if (!timestamp) return "—";
-  return `${timestamp} UTC`;
-}
-
-function parseUtcDate(timestamp) {
-  if (!timestamp) return null;
-
-  let iso = String(timestamp).trim();
-
-  // Convert "YYYY-MM-DD HH:MM:SS" to ISO-like form
-  if (iso.includes(" ") && !iso.includes("T")) {
-    iso = iso.replace(" ", "T");
-  }
-
-  // Only append Z if there is not already a timezone
-  const hasTimezone = /[zZ]$|[+-]\d{2}:\d{2}$/.test(iso);
-  if (!hasTimezone) {
-    iso = `${iso}Z`;
-  }
-
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function formatNoaaApiDate(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  const h = String(date.getUTCHours()).padStart(2, "0");
-  const min = String(date.getUTCMinutes()).padStart(2, "0");
-  return `${y}${m}${d} ${h}:${min}`;
-}
-
-function buildNoaaWindow(
-  cycleTimestamp,
-  hoursBack = 48,
-  hoursForward = 48
-) {
-  const cycleDate = parseUtcDate(cycleTimestamp);
-  if (!cycleDate) return null;
-
-  const begin = new Date(
-    cycleDate.getTime() - hoursBack * 60 * 60 * 1000
-  );
-
-  const end = new Date(
-    cycleDate.getTime() + hoursForward * 60 * 60 * 1000
-  );
-
-  return {
-    beginDate: formatNoaaApiDate(begin),
-    endDate: formatNoaaApiDate(end)
-  };
+  const date = parseObservationDate(timestamp);
+  return date ? formatTooltipTime(date.getTime()) : String(timestamp);
 }
 
 function formatObservedValue(observation) {
-  if (observation?.v == null) return "—";
-  const value = Number(observation.v);
-  return Number.isFinite(value) ? `${value.toFixed(2)} ft NAVD88` : "—";
+  const value = Number(observation?.value);
+  return Number.isFinite(value)
+    ? `${value.toFixed(2)} ${observation.unit} ${observation.datum}`
+    : "—";
 }
 
 function formatForecastValue(value) {
@@ -96,21 +52,6 @@ function getYAxisTickStep(min, max) {
   return 10;
 }
 
-function normalizeObservedSeries(noaaData) {
-  return (noaaData || [])
-    .map((d) => {
-      const value = Number(d.v);
-      const date = parseUtcDate(d.t);
-      if (!Number.isFinite(value) || !date) return null;
-      return {
-        timestamp: d.t,
-        date,
-        value
-      };
-    })
-    .filter(Boolean);
-}
-
 function normalizeForecastSeries(stationForecast) {
   if (!stationForecast?.time_date || !stationForecast?.zeta) return [];
 
@@ -120,7 +61,7 @@ function normalizeForecastSeries(stationForecast) {
   for (let i = 0; i < n; i += 1) {
     const timestamp = stationForecast.time_date[i];
     const value = Number(stationForecast.zeta[i]);
-    const date = parseUtcDate(timestamp);
+    const date = parseObservationDate(timestamp);
 
     if (!Number.isFinite(value) || !date) continue;
 
@@ -272,8 +213,8 @@ export default function StationPanel({
   onResizeBy
 }) {
 
-  const [noaaData, setNoaaData] = useState([]);
-  const [noaaStatus, setNoaaStatus] = useState("idle");
+  const [observationSeries, setObservationSeries] = useState([]);
+  const [observationLoadStatus, setObservationLoadStatus] = useState("idle");
 
   const [forecastSeries, setForecastSeries] = useState([]);
   const [forecastStatus, setForecastStatus] = useState("idle");
@@ -296,64 +237,40 @@ export default function StationPanel({
   const tickLength = Math.max(5, Math.min(8, Math.round(chartHeight * 0.025)));
 
   useEffect(() => {
-    if (!station?.id || !forecastCycleTime || isAdcircPoint) {
-      setNoaaData([]);
-      setNoaaStatus("idle");
+    if (!station?.id || !forecastCycleTime || isAdcircPoint || !station.hasObservations) {
+      setObservationSeries([]);
+      setObservationLoadStatus("idle");
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
 
-    async function fetchNoaaData() {
-      setNoaaStatus("loading");
-      setNoaaData([]);
-
-      const window = buildNoaaWindow(forecastCycleTime, 48, 48);
-      if (!window) {
-        setNoaaStatus("error");
-        return;
-      }
-
-      const params = new URLSearchParams({
-        product: "water_level",
-        station: station.id,
-        begin_date: window.beginDate,
-        end_date: window.endDate,
-        datum: "NAVD",
-        units: "english",
-        time_zone: "gmt",
-        format: "json",
-        application: "forecast-ui"
-      });
-
-      const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?${params.toString()}`;
-
+    async function loadObservations() {
+      setObservationLoadStatus("loading");
+      setObservationSeries([]);
       try {
-        const response = await fetch(url);
-        const payload = await response.json();
-
-        if (cancelled) return;
-
-        if (response.ok && Array.isArray(payload?.data) && payload.data.length > 0) {
-          setNoaaData(payload.data);
-          setNoaaStatus("ready");
+        const series = await fetchStationObservations(
+          station,
+          forecastCycleTime,
+          controller.signal
+        );
+        if (series.length) {
+          setObservationSeries(series);
+          setObservationLoadStatus("ready");
         } else {
-          setNoaaStatus("empty");
+          setObservationLoadStatus("empty");
         }
-      } catch {
-        if (!cancelled) setNoaaStatus("error");
+      } catch (error) {
+        if (error?.name !== "AbortError") setObservationLoadStatus("error");
       }
     }
 
-    fetchNoaaData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [station, forecastCycleTime, isAdcircPoint, runMeta]);
+    loadObservations();
+    return () => controller.abort();
+  }, [station, forecastCycleTime, isAdcircPoint]);
 
   useEffect(() => {
-    if (!station?.id || !forecastJsonUrl) {
+    if (!station?.id || !forecastJsonUrl || (!isAdcircPoint && !station.hasModelData)) {
       setForecastSeries([]);
       setForecastStatus("idle");
       return;
@@ -397,7 +314,7 @@ export default function StationPanel({
   }, [station, forecastJsonUrl, isAdcircPoint]);
 
   useEffect(() => {
-    if (!station?.id || !analysisJsonUrl || isAdcircPoint) {
+    if (!station?.id || !analysisJsonUrl || isAdcircPoint || !station.hasModelData) {
       setAnalysisSeries([]);
       setAnalysisStatus("idle");
       return;
@@ -462,14 +379,12 @@ export default function StationPanel({
     return () => observer.disconnect();
   }, []);
 
-  const observedSeries = useMemo(() => {
-    return normalizeObservedSeries(noaaData);
-  }, [noaaData]);
+  const observedSeries = observationSeries;
 
   const latestObservation = useMemo(() => {
     if (!observedSeries.length) return null;
     const last = observedSeries[observedSeries.length - 1];
-    return { t: last.timestamp, v: last.value };
+    return last;
   }, [observedSeries]);
 
   const latestForecast = useMemo(() => {
@@ -623,42 +538,58 @@ function handleChartMouseLeave() {
           <span className="station-id">
             {isAdcircPoint
               ? `Lat: ${station.lat.toFixed(4)} · Lon: ${station.lon.toFixed(4)}`
-              : `ID: ${station.id}`}
+              : `${station.provider} · ID: ${station.sensorId || station.id}`}
           </span>
+          {!isAdcircPoint && (
+            <span className={`observation-status status-${station.observationStatus || "unknown"}`}>
+              {OBSERVATION_STATUS_LABELS[station.observationStatus || "unknown"]}
+            </span>
+          )}
         </div>
 
         <div className="station-center">
-          <div className="metric">
-            <span className="metric-label">Peak Forecast</span>
-            <span className="metric-value">
-              {peakForecast ? formatForecastValue(peakForecast.value) : "—"}
-            </span>
-          </div>
+          {(isAdcircPoint || station.hasModelData) ? (
+            <>
+              <div className="metric">
+                <span className="metric-label">Peak Forecast</span>
+                <span className="metric-value">
+                  {peakForecast ? formatForecastValue(peakForecast.value) : "—"}
+                </span>
+              </div>
 
-          <div className="metric">
-            <span className="metric-label">Peak Time</span>
-            <span className="metric-value">
-              {peakForecast ? formatUtcTimestamp(peakForecast.timestamp) : "—"}
-            </span>
-          </div>
+              <div className="metric">
+                <span className="metric-label">Peak Time</span>
+                <span className="metric-value">
+                  {peakForecast ? formatUtcTimestamp(peakForecast.timestamp) : "—"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="metric">
+              <span className="metric-label">Model Data</span>
+              <span className="metric-value metric-value-small">Not available yet</span>
+            </div>
+          )}
 
           {!isAdcircPoint && (
             <>
               <div className="metric">
                 <span className="metric-label">Latest Observed</span>
                 <span className="metric-value">
-                  {noaaStatus === "loading" && "Loading..."}
-                  {noaaStatus === "error" && "NOAA load failed"}
-                  {noaaStatus === "empty" && "No data"}
-                  {noaaStatus === "ready" && formatObservedValue(latestObservation)}
-                  {noaaStatus === "idle" && "—"}
+                  {observationLoadStatus === "loading" && "Loading..."}
+                  {observationLoadStatus === "error" && `${station.provider} load failed`}
+                  {observationLoadStatus === "empty" && "No data"}
+                  {observationLoadStatus === "ready" && formatObservedValue(latestObservation)}
+                  {observationLoadStatus === "idle" && "—"}
                 </span>
               </div>
 
               <div className="metric">
                 <span className="metric-label">Observed Time</span>
                 <span className="metric-value">
-                  {noaaStatus === "ready" ? formatUtcTimestamp(latestObservation?.t) : "—"}
+                  {observationLoadStatus === "ready"
+                    ? formatUtcTimestamp(latestObservation?.timestamp)
+                    : "—"}
                 </span>
               </div>
             </>
@@ -681,25 +612,36 @@ function handleChartMouseLeave() {
             {runMeta?.forecastType === "hurricane"
               ? `Advisory ${runMeta?.advisory || "—"} · Forecast cycle: ${forecastCycleTime ? formatUtcTimestamp(forecastCycleTime) : "—"}`
               : `Forecast cycle: ${forecastCycleTime ? formatUtcTimestamp(forecastCycleTime) : "—"}`}
+            {!isAdcircPoint && ["delayed", "stale", "offline"].includes(station.observationStatus) && (
+              <span className="observation-warning">
+                {` · ${station.provider} observations may be ${station.observationStatus}. Latest feed observation: ${formatUtcTimestamp(station.latestObservationTime)}`}
+              </span>
+            )}
           </div>
           <div
             className="chart-box"
             style={{ position: "relative" }}
             ref={chartContainerRef}
           >
-            {noaaStatus === "loading" && forecastStatus === "loading" && (
+            {observationLoadStatus === "loading" &&
+              (forecastStatus === "loading" || !station.hasModelData) && (
               <div className="chart-empty-state" role="status">Loading station data…</div>
             )}
 
-            {!hasAnyChartData && noaaStatus === "error" && forecastStatus === "error" && (
-              <div className="chart-empty-state" role="alert">Failed to load observed and forecast data</div>
+            {!hasAnyChartData && observationLoadStatus === "error" &&
+              (forecastStatus === "error" || !station.hasModelData) && (
+              <div className="chart-empty-state" role="alert">
+                {station.hasModelData
+                  ? "Failed to load observed and forecast data"
+                  : `Failed to load ${station.provider} observations`}
+              </div>
             )}
 
             {!hasAnyChartData &&
-              (noaaStatus === "empty" ||
-                noaaStatus === "error" ||
-                noaaStatus === "ready" ||
-                noaaStatus === "idle") &&
+              (observationLoadStatus === "empty" ||
+                observationLoadStatus === "error" ||
+                observationLoadStatus === "ready" ||
+                observationLoadStatus === "idle") &&
               (forecastStatus === "empty" ||
                 forecastStatus === "error" ||
                 forecastStatus === "ready" ||
@@ -758,7 +700,7 @@ function handleChartMouseLeave() {
                     })}
                 
                     {forecastCycleTime && timeDomain && chartStats && (() => {
-                      const cycleDate = parseUtcDate(forecastCycleTime);
+                      const cycleDate = parseObservationDate(forecastCycleTime);
                       if (!cycleDate) return null;
 
                       const x = scaleX(
@@ -972,16 +914,18 @@ function handleChartMouseLeave() {
                           {hoverData.observed ? formatForecastValue(hoverData.observed.value) : "—"}
                         </div>
                       )}
-                      {!isAdcircPoint && (
+                      {!isAdcircPoint && station.hasModelData && (
                         <div>
                           <strong>Analysis:</strong>{" "}
                           {hoverData.analysis ? formatForecastValue(hoverData.analysis.value) : "—"}
                         </div>
                       )}
-                      <div>
-                        <strong>Forecast:</strong>{" "}
-                        {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
-                      </div>
+                      {(isAdcircPoint || station.hasModelData) && (
+                        <div>
+                          <strong>Forecast:</strong>{" "}
+                          {hoverData.forecast ? formatForecastValue(hoverData.forecast.value) : "—"}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -992,16 +936,18 @@ function handleChartMouseLeave() {
                         Observed
                       </div>
                     )}
-                    {!isAdcircPoint && (
+                    {!isAdcircPoint && station.hasModelData && (
                       <div className="chart-legend-item">
                         <span className="legend-line analysis" />
                         Analysis
                       </div>
                     )}
-                    <div className="chart-legend-item">
-                      <span className="legend-line forecast" />
-                      Forecast
-                    </div>
+                    {(isAdcircPoint || station.hasModelData) && (
+                      <div className="chart-legend-item">
+                        <span className="legend-line forecast" />
+                        Forecast
+                      </div>
+                    )}
                   </div>
               </>
             )}

@@ -3,6 +3,7 @@ import L from "leaflet";
 import {
   MapContainer,
   Marker,
+  Popup,
   TileLayer,
   useMap,
   ZoomControl,
@@ -14,15 +15,35 @@ import hurricaneCat2Icon from "../assets/hurricane_cat2_icon.png";
 import hurricaneCat3Icon from "../assets/hurricane_cat3_icon.png";
 import hurricaneCat4Icon from "../assets/hurricane_cat4_icon.png";
 import hurricaneCat5Icon from "../assets/hurricane_cat5_icon.png";
+import { OBSERVATION_STATUS_LABELS } from "../config/observations.js";
 
 const TITILER_BASE_URL = "https://tiles.gafloodforecast.com";
 
-const stationIcon = new L.DivIcon({
-  className: "station-marker-wrapper",
-  html: '<div class="station-marker-dot"></div>',
-  iconSize: [18, 18],
-  iconAnchor: [9, 9]
-});
+function createStationIcon(station) {
+  const provider = String(station.provider || "unknown").toLowerCase();
+  const status = station.observationStatus || "unknown";
+  return new L.DivIcon({
+    className: `station-marker-wrapper provider-${provider} status-${status}`,
+    html: '<div class="station-marker-dot" aria-hidden="true"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  });
+}
+
+function formatStationObservationTime(timestamp) {
+  if (!timestamp) return "Unavailable";
+  const date = new Date(timestamp.includes("T") ? timestamp : `${timestamp.replace(" ", "T")}Z`);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return `${date.toLocaleString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  })} UTC`;
+}
 
 const pinnedIcon = L.divIcon({
   className: "pinned-marker",
@@ -333,6 +354,17 @@ function MapBridge({ mapRef, onMapClick, onReady, onViewChange }) {
     mapRef.current = map;
     onReady?.(map);
 
+    const container = map.getContainer();
+    let resizeFrame = null;
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        map.invalidateSize({ animate: false, pan: false, debounceMoveend: true });
+        resizeFrame = null;
+      });
+    });
+    resizeObserver.observe(container);
+
     const handleClick = (e) => onMapClick?.(e);
     const handleViewChange = () => {
       const center = map.getCenter();
@@ -348,6 +380,8 @@ function MapBridge({ mapRef, onMapClick, onReady, onViewChange }) {
     map.on("zoomend", handleViewChange);
 
     return () => {
+      resizeObserver.disconnect();
+      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
       map.off("click", handleClick);
       map.off("moveend", handleViewChange);
       map.off("zoomend", handleViewChange);
@@ -1012,16 +1046,45 @@ export default function LeafletMap({
         )}
 
         {stationsVisible &&
-          stations.map((station) => (
+          stations
+            .filter((station) =>
+              !["loading", "offline"].includes(station.observationStatus)
+            )
+            .map((station) => (
             <Marker
-              key={station.id}
+              key={`${station.provider}:${station.id}`}
               position={[station.lat, station.lon]}
-              icon={stationIcon}
-              title={`${station.name} NOAA station`}
-              alt={`${station.name} NOAA station`}
+              icon={createStationIcon(station)}
+              title={`${station.name} ${station.provider} station, ${OBSERVATION_STATUS_LABELS[station.observationStatus || "unknown"]}`}
+              alt={`${station.name} ${station.provider} station`}
               eventHandlers={{ click: () => onStationSelect(station) }}
-            />
-          ))}
+            >
+              <Popup autoPan={false}>
+                <div className="station-popup">
+                  <strong>{station.name}</strong>
+                  <div>{station.provider} station</div>
+                  <div>
+                    Status: {OBSERVATION_STATUS_LABELS[station.observationStatus || "unknown"]}
+                  </div>
+                  <div>
+                    Latest observation: {formatStationObservationTime(station.latestObservationTime)}
+                  </div>
+                  {!station.hasObservations && (
+                    <div className="station-popup-warning">
+                      Observations are not available from the current API.
+                    </div>
+                  )}
+                  {station.hasObservations &&
+                    ["delayed", "stale", "offline"].includes(station.observationStatus) && (
+                    <div className="station-popup-warning">
+                      Observations may be delayed or unavailable.
+                    </div>
+                  )}
+                  {!station.hasModelData && <div>ADCIRC model data: not available</div>}
+                </div>
+              </Popup>
+            </Marker>
+            ))}
       </MapContainer>
 
       <MapLegend layerConfig={displayLayerConfig} />

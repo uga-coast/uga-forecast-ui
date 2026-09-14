@@ -406,6 +406,8 @@ export default function Sidebar(props) {
     latestRunOverall,
     stationsVisible,
     onStationsVisibleChange,
+    stationProviders,
+    onStationProviderChange,
     pointHydrographEnabled,
     onPointHydrographEnabledChange,
     pointHydrographAvailable,
@@ -769,8 +771,42 @@ export default function Sidebar(props) {
             checked={stationsVisible}
             onChange={(e) => onStationsVisibleChange(e.target.checked)}
           />
-          <label htmlFor="stations-toggle">Show NOAA Stations</label>
+          <label htmlFor="stations-toggle">Show Observation Stations</label>
         </div>
+
+        <fieldset
+          className="station-provider-options"
+          disabled={!stationsVisible}
+        >
+          <legend>Observation datasets</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={stationProviders.NOAA}
+              onChange={(e) => onStationProviderChange("NOAA", e.target.checked)}
+            />
+            <span className="provider-swatch provider-noaa" aria-hidden="true" />
+            NOAA tide gauges
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={stationProviders.SSLS}
+              onChange={(e) => onStationProviderChange("SSLS", e.target.checked)}
+            />
+            <span className="provider-swatch provider-ssls" aria-hidden="true" />
+            Georgia Tech SSLS
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={stationProviders.USGS}
+              onChange={(e) => onStationProviderChange("USGS", e.target.checked)}
+            />
+            <span className="provider-swatch provider-usgs" aria-hidden="true" />
+            USGS Water Levels
+          </label>
+        </fieldset>
 
         <div className="toggle-row">
           <input
