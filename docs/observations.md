@@ -60,10 +60,12 @@ Missing/unparseable timestamps and request failures are `unknown`. The viewer re
 
 The Display controls provide a master “Show Observation Stations” switch plus independent NOAA tide-gauge and Georgia Tech SSLS dataset checkboxes. NOAA is enabled by default; SSLS is opt-in for now. Provider choices are retained in shared URLs with the `noaa` and `ssls` query parameters.
 
-## Before adding ADCIRC at SSLS locations
+## ADCIRC station mapping
 
 - Preserve the surveyed sensor elevation and the exact station coordinates used to select/interpolate the ADCIRC node.
-- Decide whether ADCIRC station time series will be keyed by the SSLS Thing ID, hardware `sensorId`, or a separate stable model-location ID; do not assume the SensorThings numeric ID is permanent.
+- ADCIRC station time series use a separate stable `modelStationId`; observation requests continue to use each provider's native identifiers.
+- Georgia Tech locations map to `SSLS01` through `SSLS23`, matching the identifiers in the ADCIRC elevation-station input file. USGS locations use their gauge IDs for both `id` and `modelStationId`.
+- Forecast lookup in `station_WSE.json` and analysis requests to `/adcirc/station-analysis` use `modelStationId`, falling back to `id` for existing NOAA stations.
 - Record mesh/node identity, horizontal distance to the sensor, wet/dry behavior, model datum, and any datum transformation/version in generated metadata.
 - Confirm that model output is NAVD88 feet before plotting it with normalized observations.
 - Consider whether the 19-station reliable/surveyed subset remains the operational comparison set, and establish a maintained source of truth rather than copying metadata indefinitely.

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OBSERVATION_PROVIDERS } from "../src/config/observations.js";
+import {
+  OBSERVATION_PROVIDER_ENABLED,
+  OBSERVATION_PROVIDERS
+} from "../src/config/observations.js";
 import {
   SSLS_RELIABLE_STATIONS,
   STATIONS_BY_REGION,
@@ -143,6 +146,15 @@ test("the catalog retains the full preferred SSLS set independently of availabil
     SSLS_RELIABLE_STATIONS.filter((station) => station.hasObservations).length,
     19
   );
+  assert.deepEqual(
+    SSLS_RELIABLE_STATIONS.map((station) => station.modelStationId),
+    Array.from({ length: 23 }, (_, index) => `SSLS${String(index + 1).padStart(2, "0")}`)
+  );
+  assert.ok(SSLS_RELIABLE_STATIONS.every((station) => station.hasModelData));
+});
+
+test("Georgia Tech SSLS stations remain configured but are hidden in the UI", () => {
+  assert.equal(OBSERVATION_PROVIDER_ENABLED[OBSERVATION_PROVIDERS.SSLS], false);
 });
 
 test("USGS stations use explicitly configured supported observation series", () => {
@@ -154,7 +166,8 @@ test("USGS stations use explicitly configured supported observation series", () 
   for (const station of USGS_GEORGIA_STATIONS) {
     assert.equal(station.provider, OBSERVATION_PROVIDERS.USGS);
     assert.equal(station.hasObservations, true);
-    assert.equal(station.hasModelData, false);
+    assert.equal(station.hasModelData, true);
+    assert.equal(station.modelStationId, station.id);
     assert.equal(station.observationStatus, "unknown");
     assert.equal(station.observationDatum, "NAVD88");
     assert.equal(station.observationParameterCode, "00065");

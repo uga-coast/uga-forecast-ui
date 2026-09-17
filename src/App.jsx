@@ -6,7 +6,10 @@ import LeafletMap from "./components/LeafletMap.jsx";
 import StationPanel from "./components/StationPanel.jsx";
 import { STATIONS_BY_REGION } from "./data/stations.js";
 import { LAYER_CONFIGS } from "./config/layers.js";
-import { OBSERVATION_PROVIDERS } from "./config/observations.js";
+import {
+  OBSERVATION_PROVIDER_ENABLED,
+  OBSERVATION_PROVIDERS
+} from "./config/observations.js";
 import {
   fetchLatestObservationTimes,
   getObservationStatus,
@@ -421,9 +424,15 @@ function readUrlState() {
         : 80,
     stationsVisible: params.get("stations") !== "0",
     stationProviders: {
-      [OBSERVATION_PROVIDERS.NOAA]: params.get("noaa") !== "0",
-      [OBSERVATION_PROVIDERS.SSLS]: params.get("ssls") === "1",
-      [OBSERVATION_PROVIDERS.USGS]: params.get("usgs") === "1"
+      [OBSERVATION_PROVIDERS.NOAA]:
+        OBSERVATION_PROVIDER_ENABLED[OBSERVATION_PROVIDERS.NOAA] &&
+        params.get("noaa") !== "0",
+      [OBSERVATION_PROVIDERS.SSLS]:
+        OBSERVATION_PROVIDER_ENABLED[OBSERVATION_PROVIDERS.SSLS] &&
+        params.get("ssls") === "1",
+      [OBSERVATION_PROVIDERS.USGS]:
+        OBSERVATION_PROVIDER_ENABLED[OBSERVATION_PROVIDERS.USGS] &&
+        params.get("usgs") !== "0"
     },
     mapView:
       Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(zoom)
@@ -1035,7 +1044,7 @@ export default function App() {
     if (!stationsVisible) params.set("stations", "0");
     if (!stationProviders[OBSERVATION_PROVIDERS.NOAA]) params.set("noaa", "0");
     if (stationProviders[OBSERVATION_PROVIDERS.SSLS]) params.set("ssls", "1");
-    if (stationProviders[OBSERVATION_PROVIDERS.USGS]) params.set("usgs", "1");
+    if (!stationProviders[OBSERVATION_PROVIDERS.USGS]) params.set("usgs", "0");
 
     if (mapView) {
       params.set("lat", mapView.lat.toFixed(5));
@@ -1123,7 +1132,9 @@ export default function App() {
   const configuredStations = STATIONS_BY_REGION[selectedMeshInfo?.region] ?? EMPTY_STATIONS;
   const enabledObservationStations = useMemo(
     () => configuredStations.filter(
-      (station) => stationProviders[station.provider] !== false
+      (station) =>
+        OBSERVATION_PROVIDER_ENABLED[station.provider] !== false &&
+        stationProviders[station.provider] !== false
     ),
     [configuredStations, stationProviders]
   );
@@ -1178,7 +1189,10 @@ export default function App() {
     if (!selectedStationDetails || selectedStationDetails.isAdcircPoint || !selectedStationDetails.hasModelData) {
       return null;
     }
-    return buildStationAnalysisUrl(runBaseUrl, selectedStationDetails.id);
+    return buildStationAnalysisUrl(
+      runBaseUrl,
+      selectedStationDetails.modelStationId || selectedStationDetails.id
+    );
   }, [selectedStationDetails, runBaseUrl]);
 
   return (
@@ -1407,7 +1421,9 @@ export default function App() {
             <LeafletMap
               selectedMesh={selectedMesh}
               stations={activeStations.filter(
-                (station) => stationProviders[station.provider] !== false
+                (station) =>
+                  OBSERVATION_PROVIDER_ENABLED[station.provider] !== false &&
+                  stationProviders[station.provider] !== false
               )}
               stationsVisible={stationsVisible}
               opacity={opacity}

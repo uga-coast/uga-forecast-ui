@@ -291,7 +291,7 @@ export default function StationPanel({
 
         const stationForecast = isAdcircPoint
           ? payload
-          : payload?.[station.id];
+          : payload?.[station.modelStationId || station.id];
 
         const series = normalizeForecastSeries(stationForecast);
 

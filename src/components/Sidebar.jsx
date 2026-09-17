@@ -1,4 +1,8 @@
 import React from "react";
+import {
+  OBSERVATION_PROVIDER_ENABLED,
+  OBSERVATION_PROVIDERS
+} from "../config/observations.js";
 
 function formatRunLabel(run) {
   if (!run) return "--";
@@ -788,15 +792,17 @@ export default function Sidebar(props) {
             <span className="provider-swatch provider-noaa" aria-hidden="true" />
             NOAA tide gauges
           </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={stationProviders.SSLS}
-              onChange={(e) => onStationProviderChange("SSLS", e.target.checked)}
-            />
-            <span className="provider-swatch provider-ssls" aria-hidden="true" />
-            Georgia Tech SSLS
-          </label>
+          {OBSERVATION_PROVIDER_ENABLED[OBSERVATION_PROVIDERS.SSLS] && (
+            <label>
+              <input
+                type="checkbox"
+                checked={stationProviders.SSLS}
+                onChange={(e) => onStationProviderChange("SSLS", e.target.checked)}
+              />
+              <span className="provider-swatch provider-ssls" aria-hidden="true" />
+              Georgia Tech SSLS
+            </label>
+          )}
           <label>
             <input
               type="checkbox"
