@@ -409,7 +409,7 @@ function readUrlState() {
   const zoom = zoomRaw == null ? Number.NaN : Number(zoomRaw);
 
   return {
-    mode: VALID_MODES.has(modeParam) ? modeParam : MODES.DAILY,
+    mode: VALID_MODES.has(modeParam) ? modeParam : MODES.HURRICANE,
     mesh: params.get("mesh") || "",
     hurricaneStorm: params.get("storm") || "",
     archiveStorm: params.get("storm") || "",
@@ -544,9 +544,7 @@ class StationPanelErrorBoundary extends React.Component {
 
 export default function App() {
   const initialUrlState = useMemo(() => readUrlState(), []);
-  // set the default mode to daily for now, but this could be changed to hurricane or archive if desired
   const [mode, setMode] = useState(initialUrlState.mode);
-  //const [mode, setMode] = useState(MODES.HURRICANE);
   const [manifest, setManifest] = useState(null);
   const [manifestStatus, setManifestStatus] = useState("loading");
   const [primaryLayer, setPrimaryLayer] = useState(initialUrlState.layer);
