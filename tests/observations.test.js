@@ -370,3 +370,57 @@ test("USGS latest timestamps tolerate empty and failed station requests", async 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("NOAA MSL conversion applies signed feet offsets and rejects missing offsets", () => {
+  const payload = { data: [{ t: "2026-10-07 00:00", v: "2" }] };
+  for (const offset of [-0.75, 0, 0.75]) {
+    const [row] = normalizeNoaaObservations(payload, {
+      requestDatum: "MSL", datumOffsetFeet: offset
+    });
+    assert.equal(row.value, 2 + offset);
+    assert.equal(row.datum, "NAVD88");
+    assert.equal(row.unit, "ft");
+  }
+  for (const offset of [undefined, null, "", "0.75", NaN]) {
+    assert.throws(() => normalizeNoaaObservations(payload, {
+      requestDatum: "MSL", datumOffsetFeet: offset
+    }), /numeric NAVD88 offset/);
+  }
+  assert.deepEqual(normalizeNoaaObservations({ data: [
+    { t: "2026-10-07 00:00", v: "" },
+    { t: "2026-10-07 00:00", v: null }
+  ] }, { requestDatum: "MSL", datumOffsetFeet: 0.5 }), []);
+});
+
+test("NOAA MSL requests cover chart and freshness and cache respects changed offsets", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  const station = {
+    id: "offset-test", provider: "NOAA", hasObservations: true,
+    requestDatum: "MSL", datumOffsetFeet: -0.5
+  };
+  try {
+    globalThis.fetch = async (url) => {
+      urls.push(new URL(url));
+      return { ok: true, json: async () => ({
+        data: [{ t: "2026-10-07 00:00", v: "2" }]
+      }) };
+    };
+    const first = await fetchStationObservations(station, "2026-10-07 00:00");
+    assert.equal(first[0].value, 1.5);
+    const latest = await fetchLatestObservationTimes([station]);
+    assert.equal(latest["NOAA:offset-test"], "2026-10-07 00:00");
+    const changed = await fetchStationObservations(
+      { ...station, datumOffsetFeet: 0.5 }, "2026-10-07 00:00"
+    );
+    assert.equal(changed[0].value, 2.5);
+    assert.equal(urls.length, 3);
+    assert.equal(urls[1].searchParams.get("date"), "latest");
+    for (const url of urls) {
+      assert.equal(url.searchParams.get("datum"), "MSL");
+      assert.equal(url.searchParams.get("units"), "english");
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

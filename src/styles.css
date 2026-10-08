@@ -728,6 +728,8 @@ button, select, input {
 
 .station-popup {
   min-width: 210px;
+  max-width: 280px;
+  white-space: normal;
   line-height: 1.45;
 }
 

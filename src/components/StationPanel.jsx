@@ -663,11 +663,8 @@ function handleChartMouseLeave() {
                 preserveAspectRatio="xMidYMid meet"
                 style={{ display: "block", width: "100%", height: `${chartHeight}px` }}
                 role="img"
-                aria-labelledby="station-chart-title"
+                aria-label={`Water level observations and forecast for ${station.name}`}
               >
-                  <title id="station-chart-title">
-                    Water level observations and forecast for {station.name}
-                  </title>
                   {buildGridLines(chartWidth, chartHeight, margin, chartStats, yTickStep)}
 
                   {chartStats &&
