@@ -1,5 +1,15 @@
 import { OBSERVATION_PROVIDERS } from "../config/observations.js";
 
+// Configure only stations requiring an MSL request. Offsets are in feet:
+// NAVD88 water level = NOAA MSL water level + datumOffsetFeet.
+// Each entry: "NOAA_ID": { requestDatum: "MSL", datumOffsetFeet: signedOffset }
+export const NOAA_DATUM_OVERRIDES = {
+  // Dog River Bridge: NOAA VDatum queried 2026-10-07 at 30.5652, -88.088.
+  // Zero LMSL -> +0.138 m NAVD88; reported uncertainty 0.053 m.
+  // NAD83(2011) horizontal coordinates assumed; GEOID18.
+  "8735391": { requestDatum: "MSL", datumOffsetFeet: 0.138 / 0.3048 }
+};
+
 function noaaStation(id, name, lat, lon) {
   return {
     id,
@@ -10,7 +20,9 @@ function noaaStation(id, name, lat, lon) {
     hasObservations: true,
     hasModelData: true,
     observationUnit: "ft",
-    observationDatum: "NAVD88"
+    observationDatum: "NAVD88",
+    requestDatum: "NAVD",
+    ...NOAA_DATUM_OVERRIDES[id]
   };
 }
 
@@ -164,7 +176,6 @@ export const STATIONS_BY_REGION = {
     noaaStation("8729108", "Panama City", 30.15117, -85.66791),
     noaaStation("8729210", "Panama City Beach", 30.21195, -85.87825),
     noaaStation("8729840", "Pensacola", 30.40132, -87.21217),
-    noaaStation("8732828", "Weeks Bay Mobile Bay", 30.41107, -87.82986),
     noaaStation("8735180", "Dauphin Island", 30.25, -88.073412),
     noaaStation("8735391", "Dog River Bridge", 30.56517, -88.088),
     noaaStation("8735523", "East Fowl River Bridge", 30.45242, -88.10483),
@@ -173,8 +184,6 @@ export const STATIONS_BY_REGION = {
     noaaStation("8737138", "Chickasaw Creek", 30.76300, -88.04936),
     noaaStation("8738043", "West Fowl River Bridge", 30.36286, -88.18974),
     noaaStation("8739803", "Bayou La Batre Bridge", 30.37943, -88.27149),
-    noaaStation("8740166", "Grand Bay NERR Mississippi Sound", 30.38258, -88.39203),
-    noaaStation("8741041", "Dock E Port of Pascagoula", 30.33189, -88.50999),
     noaaStation("8741533", "Pascagoula NOAA Lab", 30.34462, -88.56860),
     noaaStation("8747437", "Bay Waveland Yacht Club", 30.32639, -89.32578)
   ],

@@ -59,11 +59,24 @@ function normalizedObservation(timestamp, value, provider) {
   };
 }
 
-export function normalizeNoaaObservations(payload) {
+function noaaDatumConfig(station) {
+  const datum = station?.requestDatum ?? "NAVD";
+  if (datum === "NAVD") return { datum, offset: 0 };
+  if (datum !== "MSL" || !Number.isFinite(station?.datumOffsetFeet)) {
+    throw new Error("NOAA MSL observations require a numeric NAVD88 offset in feet");
+  }
+  return { datum, offset: station.datumOffsetFeet };
+}
+
+export function normalizeNoaaObservations(payload, station) {
+  const { offset } = noaaDatumConfig(station);
   return (payload?.data || [])
-    .map((row) =>
-      normalizedObservation(row.t, Number(row.v), OBSERVATION_PROVIDERS.NOAA)
-    )
+    .map((row) => {
+      if (row.v == null || String(row.v).trim() === "") return null;
+      return normalizedObservation(
+        row.t, Number(row.v) + offset, OBSERVATION_PROVIDERS.NOAA
+      );
+    })
     .filter(Boolean);
 }
 
@@ -164,13 +177,13 @@ async function fetchNoaaObservations(station, window, signal) {
     station: station.id,
     begin_date: formatNoaaApiDate(window.begin),
     end_date: formatNoaaApiDate(window.end),
-    datum: "NAVD",
+    datum: noaaDatumConfig(station).datum,
     units: "english",
     time_zone: "gmt",
     format: "json",
     application: "forecast-ui"
   });
-  return normalizeNoaaObservations(await fetchJson(`${NOAA_API_URL}?${params}`, signal));
+  return normalizeNoaaObservations(await fetchJson(`${NOAA_API_URL}?${params}`, signal), station);
 }
 
 function operationalSslsUrl(url) {
@@ -241,7 +254,10 @@ export async function fetchStationObservations(station, cycleTimestamp, signal) 
   const window = buildObservationWindow(cycleTimestamp);
   if (!window) return [];
 
-  const cacheKey = `${stationKey(station)}:${cycleTimestamp}`;
+  const datumKey = station.provider === OBSERVATION_PROVIDERS.NOAA
+    ? JSON.stringify(noaaDatumConfig(station))
+    : "";
+  const cacheKey = `${stationKey(station)}:${cycleTimestamp}:${datumKey}`;
   const cached = observationCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.series;
 
@@ -268,14 +284,14 @@ async function fetchNoaaLatestTimestamp(station, signal) {
     product: "water_level",
     date: "latest",
     station: station.id,
-    datum: "NAVD",
+    datum: noaaDatumConfig(station).datum,
     units: "english",
     time_zone: "gmt",
     format: "json",
     application: "forecast-ui"
   });
   const series = normalizeNoaaObservations(
-    await fetchJson(`${NOAA_API_URL}?${params}`, signal)
+    await fetchJson(`${NOAA_API_URL}?${params}`, signal), station
   );
   return series.at(-1)?.timestamp || null;
 }

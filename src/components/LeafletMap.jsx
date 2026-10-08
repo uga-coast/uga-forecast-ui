@@ -3,7 +3,7 @@ import L from "leaflet";
 import {
   MapContainer,
   Marker,
-  Popup,
+  Tooltip,
   TileLayer,
   useMap,
   ZoomControl,
@@ -485,6 +485,7 @@ export default function LeafletMap({
   const hasAppliedInitialViewRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
+  const [hoveredStationKey, setHoveredStationKey] = useState(null);
   const [showSpinner, setShowSpinner] = useState(false);
 
   useEffect(() => {
@@ -1055,11 +1056,18 @@ export default function LeafletMap({
               key={`${station.provider}:${station.id}`}
               position={[station.lat, station.lon]}
               icon={createStationIcon(station)}
-              title={`${station.name} ${station.provider} station, ${OBSERVATION_STATUS_LABELS[station.observationStatus || "unknown"]}`}
               alt={`${station.name} ${station.provider} station`}
-              eventHandlers={{ click: () => onStationSelect(station) }}
+              eventHandlers={{
+                mouseover: () => setHoveredStationKey(`${station.provider}:${station.id}`),
+                mouseout: () => setHoveredStationKey(null),
+                click: () => {
+                  setHoveredStationKey(null);
+                  onStationSelect(station);
+                }
+              }}
             >
-              <Popup autoPan={false}>
+              {hoveredStationKey === `${station.provider}:${station.id}` && (
+              <Tooltip direction="top" opacity={1} permanent>
                 <div className="station-popup">
                   <strong>{station.name}</strong>
                   <div>{station.provider} station</div>
@@ -1082,7 +1090,8 @@ export default function LeafletMap({
                   )}
                   {!station.hasModelData && <div>ADCIRC model data: not available</div>}
                 </div>
-              </Popup>
+              </Tooltip>
+              )}
             </Marker>
             ))}
       </MapContainer>
