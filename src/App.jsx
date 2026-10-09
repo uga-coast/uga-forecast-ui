@@ -15,9 +15,19 @@ import {
   getObservationStatus,
   stationKey
 } from "./services/observations.js";
+import {
+  getHurricaneMeteorology,
+  getDefaultMeteorology,
+  getHurricaneForecasts,
+  getHurricaneRuns,
+  getHurricaneRunMetadata,
+  getHurricaneS3Prefix
+} from "./utils/hurricaneManifest.js";
 
 const S3_BASE_URL = "https://uga-coast-forecasting.s3.us-east-1.amazonaws.com";
-const MANIFEST_URL = `${S3_BASE_URL}/raster-manifest.json`;
+const MANIFEST_FILENAME =
+  import.meta.env.VITE_MANIFEST_FILENAME || "raster-manifest.json";
+const MANIFEST_URL = `${S3_BASE_URL}/${MANIFEST_FILENAME}`;
 const MODES = { DAILY: "daily", HURRICANE: "hurricane", ARCHIVE: "archive" };
 const VALID_MODES = new Set(Object.values(MODES));
 const VALID_LAYERS = new Set(["maxele", "swan_HS_max"]);
@@ -407,12 +417,14 @@ function readUrlState() {
   const lat = latRaw == null ? Number.NaN : Number(latRaw);
   const lon = lonRaw == null ? Number.NaN : Number(lonRaw);
   const zoom = zoomRaw == null ? Number.NaN : Number(zoomRaw);
+  const meteorology = params.get("meteo") || "";
 
   return {
     mode: VALID_MODES.has(modeParam) ? modeParam : MODES.HURRICANE,
     mesh: params.get("mesh") || "",
     hurricaneStorm: params.get("storm") || "",
     archiveStorm: params.get("storm") || "",
+    meteorology,
     year: params.get("year") || "",
     date: params.get("date") || "",
     run: params.get("run") || "",
@@ -553,6 +565,9 @@ export default function App() {
   const [selectedHurricaneStorm, setSelectedHurricaneStorm] = useState(
     initialUrlState.hurricaneStorm
   );
+  const [selectedMeteorology, setSelectedMeteorology] = useState(
+    initialUrlState.meteorology
+  );
   const [selectedYear, setSelectedYear] = useState(initialUrlState.year);
   const [selectedArchiveStorm, setSelectedArchiveStorm] = useState(
     initialUrlState.archiveStorm
@@ -680,6 +695,27 @@ export default function App() {
     [manifest, selectedMesh]
   );
 
+  const availableMeteorology = useMemo(
+  () =>
+    getHurricaneMeteorology(
+      manifest,
+      selectedMesh,
+      selectedHurricaneStorm
+    ),
+  [manifest, selectedMesh, selectedHurricaneStorm]
+);
+
+  useEffect(() => {
+    if (mode !== MODES.HURRICANE) return;
+    if (!availableMeteorology.length) return;
+
+    if (!availableMeteorology.includes(selectedMeteorology)) {
+      setSelectedMeteorology(
+        getDefaultMeteorology(availableMeteorology)
+      );
+    }
+  }, [mode, availableMeteorology, selectedMeteorology]);
+
   // Wait for the hurricane mesh to initialize before checking for active forecasts.
   useEffect(() => {
     if (mode !== MODES.HURRICANE) return;
@@ -748,12 +784,54 @@ export default function App() {
     mode === MODES.ARCHIVE ? selectedArchiveStorm : selectedHurricaneStorm;
 
   const liveDates = useMemo(() => {
+    if (mode === MODES.HURRICANE) {
+      return getHurricaneForecasts(
+        manifest,
+        selectedMesh,
+        selectedHurricaneStorm,
+        selectedMeteorology
+      );
+    }
+
     return getModeDates(manifest, mode, selectedMesh, activeStormKey);
-  }, [manifest, mode, selectedMesh, activeStormKey]);
+  }, [
+    manifest,
+    mode,
+    selectedMesh,
+    activeStormKey,
+    selectedHurricaneStorm,
+    selectedMeteorology
+  ]);
 
   const runsByDate = useMemo(() => {
+    if (mode === MODES.HURRICANE) {
+      const result = {};
+
+      for (const forecastId of liveDates) {
+        result[forecastId] = sortRuns(
+          getHurricaneRuns(
+            manifest,
+            selectedMesh,
+            selectedHurricaneStorm,
+            selectedMeteorology,
+            forecastId
+          )
+        );
+      }
+
+      return result;
+    }
+
     return getModeRunsByDate(manifest, mode, selectedMesh, activeStormKey);
-  }, [manifest, mode, selectedMesh, activeStormKey]);
+  }, [
+    manifest,
+    mode,
+    selectedMesh,
+    activeStormKey,
+    selectedHurricaneStorm,
+    selectedMeteorology,
+    liveDates
+  ]);
 
   const latestDateOverall = liveDates.length ? liveDates[0] : "";
   const latestRunsOverall = latestDateOverall ? sortRuns(runsByDate[latestDateOverall] || []) : [];
@@ -770,10 +848,40 @@ export default function App() {
     [runsByDate, selectedDate]
   );
 
-  const availableLayers = useMemo(
-    () => getAvailableLayers(manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey),
-    [manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey]
-  );
+  const availableLayers = useMemo(() => {
+    if (mode === MODES.HURRICANE) {
+      const metadata = getHurricaneRunMetadata(
+        manifest,
+        selectedMesh,
+        selectedHurricaneStorm,
+        selectedMeteorology,
+        selectedDate,
+        selectedRun
+      );
+
+      return metadata?.layers?.length
+        ? metadata.layers
+        : ["maxele"];
+    }
+
+    return getAvailableLayers(
+      manifest,
+      mode,
+      selectedMesh,
+      selectedDate,
+      selectedRun,
+      activeStormKey
+    );
+  }, [
+    manifest,
+    mode,
+    selectedMesh,
+    selectedDate,
+    selectedRun,
+    activeStormKey,
+    selectedHurricaneStorm,
+    selectedMeteorology
+  ]);
 
   const chosenLayer = availableLayers.includes(primaryLayer) ? primaryLayer : "maxele";
   const waveLayerAvailable = availableLayers.includes("swan_HS_max");
@@ -830,6 +938,26 @@ export default function App() {
   }, [availableLayers, primaryLayer]);
 
   const rasterUrl = useMemo(() => {
+    if (mode === MODES.HURRICANE) {
+      const prefix = getHurricaneS3Prefix(
+        manifest,
+        selectedMesh,
+        selectedHurricaneStorm,
+        selectedMeteorology,
+        selectedDate,
+        selectedRun
+      );
+
+      if (prefix) {
+        const filename =
+          chosenLayer === "swan_HS_max"
+            ? "swan_HS_max.tif"
+            : "maxele.tif";
+
+        return `${S3_BASE_URL}/${prefix}/${filename}`;
+      }
+    }
+
     return buildModeS3Url(
       manifest,
       mode,
@@ -839,22 +967,56 @@ export default function App() {
       chosenLayer,
       activeStormKey
     );
-  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, chosenLayer, activeStormKey]);
+  }, [
+    manifest,
+    mode,
+    selectedMesh,
+    selectedDate,
+    selectedRun,
+    chosenLayer,
+    activeStormKey,
+    selectedHurricaneStorm,
+    selectedMeteorology
+  ]);
 
   const runMeta = useMemo(() => {
     if (mode === MODES.DAILY) {
-      return manifest?.daily?.meshes?.[selectedMesh]?.dates?.[selectedDate]?.[selectedRun] || null;
+      return (
+        manifest?.daily?.meshes?.[selectedMesh]
+          ?.dates?.[selectedDate]?.[selectedRun] || null
+      );
     }
 
-    if (isStormMode(mode)) {
+    if (mode === MODES.HURRICANE) {
+      return getHurricaneRunMetadata(
+        manifest,
+        selectedMesh,
+        selectedHurricaneStorm,
+        selectedMeteorology,
+        selectedDate,
+        selectedRun
+      );
+    }
+
+    if (mode === MODES.ARCHIVE) {
       return (
-        manifest?.[mode]?.meshes?.[selectedMesh]?.storms?.[activeStormKey]?.advisories?.[selectedDate]?.[selectedRun] ||
-        null
+        manifest?.archive?.meshes?.[selectedMesh]
+          ?.storms?.[selectedArchiveStorm]
+          ?.advisories?.[selectedDate]?.[selectedRun] || null
       );
     }
 
     return null;
-  }, [manifest, mode, selectedMesh, selectedDate, selectedRun, activeStormKey]);
+  }, [
+    manifest,
+    mode,
+    selectedMesh,
+    selectedDate,
+    selectedRun,
+    selectedHurricaneStorm,
+    selectedMeteorology,
+    selectedArchiveStorm
+]);
 
   const hurricaneMeta = isStormMode(mode) ? runMeta?.hurricane || null : null;
 
@@ -1029,8 +1191,14 @@ export default function App() {
     params.set("layer", chosenLayer);
     params.set("basemap", basemap);
 
-    if (mode === MODES.HURRICANE && selectedHurricaneStorm) {
-      params.set("storm", selectedHurricaneStorm);
+    if (mode === MODES.HURRICANE) {
+      if (selectedHurricaneStorm) {
+        params.set("storm", selectedHurricaneStorm);
+      }
+
+      if (selectedMeteorology) {
+        params.set("meteo", selectedMeteorology);
+      }
     }
 
     if (mode === MODES.ARCHIVE) {
@@ -1099,7 +1267,27 @@ export default function App() {
     if (!runMeta?.hasStationForecast) return null;
 
     if (mode === MODES.DAILY) {
-      return buildDailyForecastJsonUrl(manifest, selectedMesh, selectedDate, selectedRun);
+      return buildDailyForecastJsonUrl(
+        manifest,
+        selectedMesh,
+        selectedDate,
+        selectedRun
+      );
+    }
+
+    if (mode === MODES.HURRICANE) {
+      const prefix = getHurricaneS3Prefix(
+        manifest,
+        selectedMesh,
+        selectedHurricaneStorm,
+        selectedMeteorology,
+        selectedDate,
+        selectedRun
+      );
+
+      if (prefix) {
+        return `${S3_BASE_URL}/${prefix}/station_WSE.json`;
+      }
     }
 
     if (isStormMode(mode)) {
@@ -1120,6 +1308,8 @@ export default function App() {
     selectedMesh,
     selectedDate,
     selectedRun,
+    selectedHurricaneStorm,
+    selectedMeteorology,
     activeStormKey,
     runMeta
   ]);
@@ -1365,6 +1555,14 @@ export default function App() {
           onAdvisoryChange={handleDateChange}
           availableHurricaneStorms={availableHurricaneStorms}
           selectedHurricaneStorm={selectedHurricaneStorm}
+          availableMeteorology={availableMeteorology}
+          selectedMeteorology={selectedMeteorology}
+          onMeteorologyChange={(meteo) => {
+            setSelectedMeteorology(meteo);
+            setSelectedDate("");
+            setSelectedRun("");
+            resetInteractiveState();
+          }}
           onHurricaneStormChange={(stormKey) => {
             setSelectedHurricaneStorm(stormKey);
             setSelectedDate("");
