@@ -3,7 +3,6 @@ import L from "leaflet";
 import {
   MapContainer,
   Marker,
-  Tooltip,
   TileLayer,
   useMap,
   ZoomControl,
@@ -15,7 +14,6 @@ import hurricaneCat2Icon from "../assets/hurricane_cat2_icon.png";
 import hurricaneCat3Icon from "../assets/hurricane_cat3_icon.png";
 import hurricaneCat4Icon from "../assets/hurricane_cat4_icon.png";
 import hurricaneCat5Icon from "../assets/hurricane_cat5_icon.png";
-import { OBSERVATION_STATUS_LABELS } from "../config/observations.js";
 
 const TITILER_BASE_URL = "https://tiles.gafloodforecast.com";
 
@@ -485,7 +483,6 @@ export default function LeafletMap({
   const hasAppliedInitialViewRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
-  const [hoveredStationKey, setHoveredStationKey] = useState(null);
   const [showSpinner, setShowSpinner] = useState(false);
 
   useEffect(() => {
@@ -1048,51 +1045,20 @@ export default function LeafletMap({
 
         {stationsVisible &&
           stations
-            .filter((station) =>
-              !["loading", "offline"].includes(station.observationStatus)
+            .filter(
+              (station) =>
+                !["loading", "offline"].includes(station.observationStatus)
             )
             .map((station) => (
-            <Marker
-              key={`${station.provider}:${station.id}`}
-              position={[station.lat, station.lon]}
-              icon={createStationIcon(station)}
-              alt={`${station.name} ${station.provider} station`}
-              eventHandlers={{
-                mouseover: () => setHoveredStationKey(`${station.provider}:${station.id}`),
-                mouseout: () => setHoveredStationKey(null),
-                click: () => {
-                  setHoveredStationKey(null);
-                  onStationSelect(station);
-                }
-              }}
-            >
-              {hoveredStationKey === `${station.provider}:${station.id}` && (
-              <Tooltip direction="top" opacity={1} permanent>
-                <div className="station-popup">
-                  <strong>{station.name}</strong>
-                  <div>{station.provider} station</div>
-                  <div>
-                    Status: {OBSERVATION_STATUS_LABELS[station.observationStatus || "unknown"]}
-                  </div>
-                  <div>
-                    Latest observation: {formatStationObservationTime(station.latestObservationTime)}
-                  </div>
-                  {!station.hasObservations && (
-                    <div className="station-popup-warning">
-                      Observations are not available from the current API.
-                    </div>
-                  )}
-                  {station.hasObservations &&
-                    ["delayed", "stale", "offline"].includes(station.observationStatus) && (
-                    <div className="station-popup-warning">
-                      Observations may be delayed or unavailable.
-                    </div>
-                  )}
-                  {!station.hasModelData && <div>ADCIRC model data: not available</div>}
-                </div>
-              </Tooltip>
-              )}
-            </Marker>
+              <Marker
+                key={`${station.provider}:${station.id}`}
+                position={[station.lat, station.lon]}
+                icon={createStationIcon(station)}
+                alt={`${station.name} ${station.provider} station`}
+                eventHandlers={{
+                  click: () => onStationSelect(station)
+                }}
+              />
             ))}
       </MapContainer>
 
