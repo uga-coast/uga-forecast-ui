@@ -438,6 +438,9 @@ export default function Sidebar(props) {
     availableHurricaneStorms,
     selectedHurricaneStorm,
     onHurricaneStormChange,
+    availableMeteorology,
+    selectedMeteorology,
+    onMeteorologyChange,
     availableMeshes,
     selectedMesh,
     onMeshChange,
@@ -619,6 +622,26 @@ export default function Sidebar(props) {
                     </option>
                   ))}
                 </select>
+
+                {availableMeteorology.length > 0 && (
+                  <>
+                    <label htmlFor="hurricane-meteorology">
+                      Meteorological Forcing
+                    </label>
+
+                    <select
+                      id="hurricane-meteorology"
+                      value={selectedMeteorology}
+                      onChange={(e) => onMeteorologyChange(e.target.value)}
+                    >
+                      {availableMeteorology.map((meteo) => (
+                        <option key={meteo} value={meteo}>
+                          {meteo.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
 
                 <label htmlFor="forecast-advisory">Advisory</label>
                 <select
