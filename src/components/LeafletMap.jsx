@@ -103,7 +103,7 @@ const RESCALE_MAP = {
   maxele: "0,9",
   storm_maxele: "0,9",
   daily_maxele: "0,6",
-  swan_HS_max: "0,20"
+  swan_HS_max: "0,40"
 };
 
 function getRasterStyleKey(layerKey, hurricaneMeta) {
