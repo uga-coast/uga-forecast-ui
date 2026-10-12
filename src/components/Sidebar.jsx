@@ -636,7 +636,10 @@ export default function Sidebar(props) {
                     >
                       {availableMeteorology.map((meteo) => (
                         <option key={meteo} value={meteo}>
-                          {meteo.toUpperCase()}
+                          {({
+                            hafsa: "HAFS-A",
+                            hafsb: "HAFS-B",
+                          }[meteo.toLowerCase()] ?? meteo.toUpperCase())}
                         </option>
                       ))}
                     </select>
