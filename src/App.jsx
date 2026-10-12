@@ -420,7 +420,7 @@ function readUrlState() {
   const meteorology = params.get("meteo") || "";
 
   return {
-    mode: VALID_MODES.has(modeParam) ? modeParam : MODES.HURRICANE,
+    mode: VALID_MODES.has(modeParam) ? modeParam : MODES.DAILY,
     mesh: params.get("mesh") || "",
     hurricaneStorm: params.get("storm") || "",
     archiveStorm: params.get("storm") || "",
